@@ -146,6 +146,8 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .sub .act .btn{padding:6px 10px;font-size:13px}
 .pay{color:var(--ok);font-weight:700}
 .siva{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:14px}
+.edt{display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px 16px;margin:4px 0 10px}.edt label:first-child{display:flex;flex-direction:column;gap:2px;font-size:12.5px;color:var(--muted,#5b636d)}
+.edt input[data-mo]{width:120px;text-align:right;font:inherit;font-size:15px;padding:6px 8px;border-radius:5px;border:1px solid var(--line,#dcd8cf);background:var(--field,#faf8f4);color:inherit}.edt .siva{margin-top:0}
 .siva input{width:20px;height:20px;accent-color:var(--fuego)}
 .cash{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:10px}
 .cash div{border:1px solid var(--line);border-radius:6px;padding:10px 12px;min-width:0}
@@ -396,7 +398,9 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
   // ---- Cálculos: los mismos que usan Avisos e Cotizaciones ----
   // Albarán = trabajo del técnico (mano de obra, desplazamiento, piezas que puso) + repuestos SAT La Latina que mete la oficina
   function albTot(b,g){
-    const mo=(b.mo!==undefined&&b.mo!==''&&b.mo!==null)?num(b.mo):num(b.h)*num(b.ph),des=b.cd===false?0:num(b.pd);
+    // la oficina puede corregir la reparación (g.mo) y quitar o poner el desplazamiento (g.cd) antes de emitir
+    const mo=(g&&g.mo!==undefined&&g.mo!==null&&g.mo!=='')?num(g.mo):(b.mo!==undefined&&b.mo!==''&&b.mo!==null)?num(b.mo):num(b.h)*num(b.ph);
+    const cd=(g&&g.cd!==undefined&&g.cd!==null)?!!g.cd:b.cd!==false,des=cd?num(b.pd):0;
     const mat=(b.m||[]).reduce((s,i)=>s+num(i.q)*num(i.p),0);
     const rp=((g&&g.rep)||[]).reduce((s,i)=>s+num(i.q)*num(i.p),0),rc=((g&&g.rep)||[]).reduce((s,i)=>s+num(i.q)*num(i.c),0);
     const siva=(g&&g.siva!==undefined&&g.siva!==null)?!!g.siva:!!b.siva,base=mo+des+mat+rp,iva=siva?0:Math.round(base*IVA)/100;
@@ -583,7 +587,9 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
       (window.LBC_fotos?'<h3 style="margin-top:10px">Fotos del técnico</h3><div class="lbc-ph" data-fotos><p class="hint" style="grid-column:1/-1">Cargando fotos…</p></div>':'')+
       '<h3 style="margin-top:10px">Cliente</h3><div class="txt">'+esc([a.cl.n,a.cl.c,a.cl.t,a.cl.d].filter(Boolean).join('\n')||'—')+'</div>'+
       '</div><div>'+
-      '<h3>Coste de la reparación</h3>'+kvHtml(r)+
+      '<h3>Coste de la reparación</h3>'+(lock?'':
+        '<div class="edt"><label>Reparación sin IVA<input data-mo inputmode="decimal" value="'+esc(g.mo!==undefined&&g.mo!==null&&g.mo!==''?g.mo:(t.mo||''))+'" placeholder="0"></label>'+
+        '<label class="siva"><input type="checkbox" data-cd'+(t.des||((g.cd!==undefined&&g.cd!==null)?g.cd:b.cd!==false)&&num(b.pd)?' checked':'')+'> Cobrar desplazamiento ('+eur(num(b.pd))+')</label></div>')+kvHtml(r)+
       '<h3 style="margin-top:12px">Repuestos SAT La Latina</h3>'+
       '<div class="rp"><span class="h">Repuesto</span><span class="h n">Cant.</span><span class="h n">Coste u.</span><span class="h n">Precio u.</span><span></span>'+
         (g.rep||[]).map((x,i)=>lock?'<span>'+esc(x.d)+'</span><span class="n">'+num(x.q).toLocaleString('es-ES')+'</span><span class="n">'+fmt(x.c)+'</span><span class="n">'+fmt(x.p)+'</span><span></span>':
@@ -613,6 +619,8 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
       const nr=load().av.find(x=>x.n===n);if(nr)await makePdf(nr,null)});
     const pdf=d.querySelector('[data-pdf]');if(pdf)pdf.addEventListener('click',()=>makePdf(r,pdf));
     d.querySelectorAll('[data-cob]').forEach(b=>b.addEventListener('click',()=>{setG(n,g=>{if(g.cob){g.cob=null;g.fp=null}else{g.cob=iso(new Date());g.fp=b.dataset.cob}});re()}));
+    const mo=d.querySelector('[data-mo]');if(mo)mo.addEventListener('change',()=>{setG(n,g=>{g.mo=String(mo.value).trim().replace(',','.')});re()});
+    const cdx=d.querySelector('[data-cd]');if(cdx)cdx.addEventListener('change',()=>{setG(n,g=>{g.cd=cdx.checked});re()});
     const sv=d.querySelector('[data-siva]');if(sv)sv.addEventListener('change',()=>{setG(n,g=>{g.siva=sv.checked});re()});
     const ro=d.querySelector('[data-reopen]');if(ro)ro.addEventListener('click',()=>{if(!confirm('¿Reabrir el albarán '+r.g.na+' para cambiar repuestos? Mantiene su número.'))return;setG(n,g=>{g.em=null;g.na0=g.na;g.na=null;g.cob=null;g.fp=null});re()});
   }
