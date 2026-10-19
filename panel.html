@@ -825,9 +825,13 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
     return l.map(x=>'<div class="r"><div><b>'+eur(x.importe)+'</b> '+(x.firmado?'<span class="chip done">Firmado</span>':'<span class="chip pend">Esperando firma</span>')+'<small>'+esc((x.fp==='banco'?'Banco':'Efectivo')+' · '+dShort(String(x.creado).slice(0,10))+(x.firmado?' · firmó el '+dShort(String(x.firmado).slice(0,10)):''))+'</small></div></div>').join('')}
   function byTec(albP,lbl){
     $('p-sub').textContent=lbl;
+    // al técnico solo se le paga lo que el cliente ya ha pagado (albarán marcado como cobrado)
+    const wait=new Map();albP.filter(r=>!r.g.cob).forEach(r=>{const k=r.tec||'Sin técnico',w=wait.get(k)||{n:0,p:0};w.n++;w.p+=payOf(r);wait.set(k,w)});
+    const waitTxt=wait.size?'<p class="hint" style="margin-top:8px"><b>Esperando a que pague el cliente:</b> '+[...wait].map(([k,w])=>esc(k)+' '+eur(w.p)+' ('+w.n+' albarán'+(w.n===1?'':'es')+')').join(' · ')+'. Saldrá para pagar cuando marques el albarán como cobrado.</p>':'';
+    albP=albP.filter(r=>r.g.cob);
     const l=tecList(albP);l.forEach(t=>t.pg=pagado(range(P),x=>x.t==='tec'&&String(x.tec||'').toLowerCase()===t.n.toLowerCase()));
     const phones=new Map(((get('lbav-settings')||{}).tecs||[]).map(t=>[String(t.n).toLowerCase(),t.t]));
-    if(!l.length){$('tecs').innerHTML='<p class="hint">Sin albaranes '+esc(lbl)+'.</p>';return}
+    if(!l.length){$('tecs').innerHTML='<p class="hint">Nada que pagar '+esc(lbl)+': todavía no hay albaranes cobrados.</p>'+waitTxt;return}
     const tot=l.reduce((a,t)=>{a.b+=t.b;a.p+=t.p;a.c+=t.l.length;return a},{b:0,p:0,c:0});
     $('tecs').innerHTML='<div class="rows"><div class="hd g-pay"><span>Técnico</span><span class="n">Alb.</span><span class="n">Sin IVA</span><span class="n">A pagar</span></div>'+
       l.map((t,i)=>'<details'+(OPENT.has(t.n)?' open':'')+' data-t="'+i+'"><summary class="g-pay"><b>'+esc(t.n)+(t.p-t.pg>0.004?'':' <span class="chip done">Pagado</span>')+'</b><span class="n">'+t.l.length+'</span><span class="n">'+eur(t.b)+'</span><span class="n pay">'+eur(t.p)+'</span></summary><div class="sub">'+
@@ -837,7 +841,7 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
         '<div class="act"><button type="button" class="btn" data-copy="'+i+'">Copiar liquidación</button>'+
         '<a class="btn" target="_blank" rel="noopener" data-wa="'+i+'">WhatsApp</a></div></div></details>').join('')+
       '<div class="tot g-pay"><span>Total</span><span class="n">'+tot.c+'</span><span class="n">'+eur(tot.b)+'</span><span class="n pay">'+eur(tot.p)+'</span></div></div>'+
-      '<p class="hint" style="margin-top:6px">'+num(PAY.pct).toLocaleString('es-ES')+' % de la reparación y el desplazamiento sin IVA. Las piezas y los repuestos no se reparten. Toca un técnico para ver su detalle y mandarle la liquidación.</p>';
+      '<p class="hint" style="margin-top:6px">'+num(PAY.pct).toLocaleString('es-ES')+' % de la reparación y el desplazamiento sin IVA. Las piezas y los repuestos no se reparten. Solo cuentan los albaranes ya cobrados al cliente. Toca un técnico para ver su detalle y mandarle la liquidación.</p>'+waitTxt;
     $('tecs').querySelectorAll('details').forEach(d=>d.addEventListener('toggle',()=>{const t=l[+d.dataset.t];if(d.open)OPENT.add(t.n);else OPENT.delete(t.n)}));
     $('tecs').querySelectorAll('[data-pay]').forEach(b=>b.addEventListener('click',()=>{const t=l[+b.dataset.pay.slice(1)],imp=Math.round((t.p-t.pg)*100)/100;
       if(!confirm('¿Apuntar el pago de '+eur(imp)+' a '+t.n+' '+(b.dataset.fp==='efectivo'?'en efectivo':'por banco')+'?'))return;

@@ -1,5 +1,5 @@
 // Red primero: siempre la última versión; si no hay cobertura, la copia guardada.
-const C='lb-v20';
+const C='lb-v21';
 self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(C).then(c=>c.addAll(['./','index.html','panel.html','cotizaciones.html','supabase.js','cloud.js','manifest.webmanifest','icon-192.png','html2canvas.min.js','jspdf.umd.min.js','xlsx.mini.min.js'])))});
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',e=>{
