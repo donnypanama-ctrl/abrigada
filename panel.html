@@ -588,7 +588,7 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
       '<div class="rp"><span class="h">Repuesto</span><span class="h n">Cant.</span><span class="h n">Coste u.</span><span class="h n">Precio u.</span><span></span>'+
         (g.rep||[]).map((x,i)=>lock?'<span>'+esc(x.d)+'</span><span class="n">'+num(x.q).toLocaleString('es-ES')+'</span><span class="n">'+fmt(x.c)+'</span><span class="n">'+fmt(x.p)+'</span><span></span>':
           '<input data-i="'+i+'" data-k="d" value="'+esc(x.d)+'" aria-label="Repuesto"><input data-i="'+i+'" data-k="q" inputmode="decimal" class="n" value="'+esc(x.q)+'" aria-label="Cantidad"><input data-i="'+i+'" data-k="c" inputmode="decimal" class="n" value="'+esc(x.c)+'" aria-label="Coste"><input data-i="'+i+'" data-k="p" inputmode="decimal" class="n" value="'+esc(x.p)+'" aria-label="Precio al cliente"><button type="button" data-del="'+i+'" aria-label="Quitar">✕</button>').join('')+
-      '</div>'+(lock?((g.rep||[]).length?'':'<p class="hint">Sin repuestos.</p>'):'<button type="button" class="btn" data-add style="margin-top:6px;padding:6px 10px;font-size:13px">+ Añadir repuesto</button><p class="hint" style="margin-top:4px">Coste = lo que te cobra SAT La Latina. Precio = lo que pagará el cliente.</p>')+
+      '</div>'+(lock?((g.rep||[]).length?'':'<p class="hint">Sin repuestos.</p>'):'<button type="button" class="btn" data-add style="margin-top:6px;padding:6px 10px;font-size:13px">+ Añadir repuesto</button><p class="hint" style="margin-top:4px">Coste = lo que te cobra SAT La Latina, sin IVA. Precio = lo que pagará el cliente.</p>')+
       (lock?(t.siva?'<p class="hint" style="margin-top:10px"><b>Albarán sin IVA.</b></p>':''):'<label class="siva"><input type="checkbox" data-siva'+(t.siva?' checked':'')+'> Hacer el albarán sin IVA (el cliente lo pide así)</label>')+
       '<div class="acts">'+(lock?
         '<button type="button" class="primary" data-pdf>PDF albarán '+esc(g.na)+'</button>'+
@@ -682,12 +682,21 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
     const l=[];albP.forEach(r=>(r.g.rep||[]).forEach(x=>l.push({r,x})));
     if(!l.length){$('reps').innerHTML='<p class="hint">Sin repuestos '+esc(lbl)+'. Se añaden en cada albarán, en la sección Albaranes.</p>';return}
     const c=l.reduce((s,o)=>s+num(o.x.q)*num(o.x.c),0),p=l.reduce((s,o)=>s+num(o.x.q)*num(o.x.p),0);
+    const ci=Math.round(c*IVA)/100,ct=Math.round((c+ci)*100)/100; // SAT La Latina es otra empresa: factura con IVA
     const pg=pagado(range(P),x=>x.t==='rep');
-    $('reps').innerHTML='<div class="funnel"><div><small>Coste SAT La Latina</small><b>'+eur0(c)+'</b><em>pagado '+eur0(pg)+'</em></div><div><small>Cobrado al cliente</small><b>'+eur0(p)+'</b></div><div><small>Margen</small><b style="color:var(--ok)">'+eur0(p-c)+'</b></div></div>'+
+    $('reps').innerHTML='<div class="funnel"><div><small>Coste SAT La Latina</small><b>'+eur0(c)+'</b><em>con IVA '+eur0(ct)+'</em></div><div><small>Cobrado al cliente</small><b>'+eur0(p)+'</b></div><div><small>Margen</small><b style="color:var(--ok)">'+eur0(p-c)+'</b></div></div>'+
       '<table><tr><th>Repuesto</th><th>Aviso</th><th class="n">Coste</th><th class="n">Precio</th></tr>'+
       l.slice(-8).reverse().map(o=>'<tr><td>'+esc(o.x.d||'—')+(num(o.x.q)!==1?' ×'+num(o.x.q).toLocaleString('es-ES'):'')+'</td><td>'+esc(o.r.n)+'</td><td class="n">'+eur(num(o.x.q)*num(o.x.c))+'</td><td class="n">'+eur(num(o.x.q)*num(o.x.p))+'</td></tr>').join('')+'</table>'+
-      '<div class="acts">'+payBtns('rep',c-pg,'Repuestos '+esc(lbl)+' pagados ✓')+'</div>';
-    $('reps').querySelectorAll('[data-pay]').forEach(b=>b.addEventListener('click',()=>{const imp=Math.round((c-pg)*100)/100;
+      '<h3 style="margin-top:14px">Factura de SAT La Latina '+esc(lbl)+'</h3><p class="hint">SAT La Latina te factura a Frimaran SL los repuestos de este periodo: base '+eur(c)+' + IVA '+IVA+' % '+eur(ci)+' = <b>'+eur(ct)+'</b>. Mándale este resumen para que te haga la factura con estos importes.</p>'+
+      '<div class="acts"><button type="button" class="primary" data-rpdf>PDF del resumen</button><button type="button" class="btn" data-rwa>Enviar por WhatsApp</button></div>'+
+      '<div class="acts">'+payBtns('rep',ct-pg,'Repuestos '+esc(lbl)+' pagados ✓')+'</div>';
+    const fe=o=>o.r.g.em||o.r.fb||'';l.sort((a,b)=>fe(a).localeCompare(fe(b)));
+    $('reps').querySelector('[data-rpdf]').addEventListener('click',e=>pdfFrom(repSheet(l,lbl,c,ci,ct),'Repuestos_SAT_La_Latina_'+lbl.replace(/^en /,'').replace(/[^\wáéíóúñ-]+/gi,'_')+'.pdf',e.currentTarget));
+    $('reps').querySelector('[data-rwa]').addEventListener('click',()=>{
+      const t='*Repuestos para facturar a Frimaran SL (La Brigada)*\nPeriodo: '+lbl.replace(/^en /,'')+'\n\n'+l.map(o=>'• '+dShort(fe(o))+' · '+(o.r.g.na||o.r.n)+' · '+(o.x.d||'Repuesto')+(num(o.x.q)!==1?' ×'+num(o.x.q).toLocaleString('es-ES'):'')+' · '+eur(num(o.x.q)*num(o.x.c))).join('\n')+
+        '\n\nBase: '+eur(c)+'\nIVA '+IVA+' %: '+eur(ci)+'\n*Total factura: '+eur(ct)+'*';
+      window.open('https://wa.me/?text='+encodeURIComponent(t),'_blank','noopener')});
+    $('reps').querySelectorAll('[data-pay]').forEach(b=>b.addEventListener('click',()=>{const imp=Math.round((ct-pg)*100)/100;
       if(!confirm('¿Apuntar el pago de '+eur(imp)+' a SAT La Latina '+(b.dataset.fp==='efectivo'?'en efectivo':'por banco')+'?'))return;
       addGasto({t:'rep',d:'SAT La Latina · repuestos '+lbl,imp,fp:b.dataset.fp})}));
   }
@@ -733,12 +742,29 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
     if(navigator.canShare&&/Android|iPhone|iPad/i.test(navigator.userAgent)&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:name});return}catch(e){if(e&&e.name==='AbortError')return}}
     const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),60000);
   }
-  async function makePdf(r,btn){
+  function makePdf(r,btn){
+    const safe=(r.cl||'cliente').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^\w-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40);
+    return pdfFrom(sheetHtml(r),(r.g.na||'Albaran_'+r.n)+'_'+safe+'.pdf',btn);
+  }
+  function repSheet(l,lbl,c,ci,ct){
+    return '<div class="s-in">'+
+      '<div class="s-top"><div class="s-logo"><img src="'+LOGO+'" alt=""><div class="s-word"><span class="la">LA</span><span class="br">BRIGADA</span><span class="sub">SERVICIO TÉCNICO · HOSTELERÍA</span></div></div>'+
+      '<div class="s-contact">Frimaran SL · Madrid<br>@labrigada.sat</div></div>'+
+      '<div class="s-band"><div><div class="s-doc">Repuestos a facturar</div><div class="s-subject">Periodo: '+esc(lbl.replace(/^en /,''))+'</div></div>'+
+      '<dl class="s-meta"><dt>Proveedor</dt><dd>SAT La Latina</dd><dt>Facturar a</dt><dd>Frimaran SL</dd><dt>Fecha</dt><dd>'+esc(dtL(iso(new Date())))+'</dd></dl></div>'+
+      '<table class="s-table"><thead><tr><th>Fecha</th><th>Albarán</th><th>Repuesto</th><th class="n">Cant.</th><th class="n">Coste u.</th><th class="n">Importe</th></tr></thead><tbody>'+
+      l.map(o=>'<tr><td>'+esc(dShort(o.r.g.em||o.r.fb||''))+'</td><td>'+esc(o.r.g.na||o.r.n)+'</td><td>'+esc(o.x.d||'—')+'</td><td class="n">'+esc(String(o.x.q).replace('.',','))+'</td><td class="n">'+eur(num(o.x.c))+'</td><td class="n">'+eur(num(o.x.q)*num(o.x.c))+'</td></tr>').join('')+
+      '</tbody></table>'+
+      '<div class="s-totals"><div><span>Base imponible</span><span>'+eur(c)+'</span></div><div><span>IVA '+IVA+' %</span><span>'+eur(ci)+'</span></div><div class="grand"><span>Total factura</span><span>'+eur(ct)+'</span></div></div>'+
+      '<div><div class="s-k">Nota</div><div class="s-txt">Relación de repuestos suministrados por SAT La Latina a La Brigada en este periodo. Por favor, emitid la factura a nombre de Frimaran SL por estos importes.</div></div>'+
+      '</div><div class="s-foot"><b>Que tu cocina no pare</b><span>Recambios: SAT La Latina</span></div><div class="s-stripes"></div>';
+  }
+  async function pdfFrom(html,name,btn){
     if(!window.html2canvas||!window.jspdf){toast('No cargó el generador de PDF. Recarga la página.');return}
     const label=btn&&btn.textContent;if(btn){btn.disabled=true;btn.textContent='Generando…'}
     try{
       await document.fonts.ready;
-      const el=document.createElement('div');el.className='sheet';el.innerHTML=sheetHtml(r);
+      const el=document.createElement('div');el.className='sheet';el.innerHTML=html;
       el.style.cssText='box-shadow:none;position:fixed;left:-10000px;top:0';document.body.appendChild(el);
       const canvas=await html2canvas(el,{scale:2,backgroundColor:'#ffffff',windowWidth:900});el.remove();
       const{jsPDF}=window.jspdf;const pdf=new jsPDF({unit:'pt',format:'a4',orientation:'portrait'});
@@ -749,8 +775,7 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
         cx.drawImage(canvas,0,y,canvas.width,h,0,0,canvas.width,h);if(pg>0)pdf.addPage();
         pdf.addImage(c.toDataURL('image/jpeg',0.92),'JPEG',0,0,pw,h*pw/canvas.width);
       }
-      const safe=(r.cl||'cliente').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^\w-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40);
-      await saveFile((r.g.na||'Albaran_'+r.n)+'_'+safe+'.pdf',pdf.output('blob'));
+      await saveFile(name,pdf.output('blob'));
     }catch(e){toast('No se pudo crear el PDF'+(e&&e.message?': '+e.message:''))}
     finally{if(btn){btn.disabled=false;btn.textContent=label}}
   }
