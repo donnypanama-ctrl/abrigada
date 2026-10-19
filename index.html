@@ -85,7 +85,7 @@ textarea{resize:vertical;min-height:64px}
 .seg label:has(input:checked){border-color:var(--fuego);box-shadow:inset 0 0 0 1px var(--fuego)}
 
 .items{display:flex;flex-direction:column;gap:8px}
-.item,.items-head{display:grid;grid-template-columns:1fr 60px 86px 30px;gap:6px;align-items:start}
+.item,.items-head{display:grid;grid-template-columns:1fr 70px 30px;gap:6px;align-items:start}
 .items-head{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 .items-head span:nth-child(2),.items-head span:nth-child(3){text-align:right}
 
@@ -316,14 +316,14 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
           <div class="full cdq"><span>¿Se cobra el desplazamiento?</span> <button type="button" id="t-cd1" class="cdb">Sí, se cobra</button> <button type="button" id="t-cd0" class="cdb">No se cobra</button></div>
           <div class="full cdq"><span>¿El cliente paga con IVA?</span> <button type="button" id="t-iva1" class="cdb">Con IVA (21 %)</button> <button type="button" id="t-iva0" class="cdb">Sin IVA</button></div>
         </div>
-        <h2 style="margin-top:14px">Materiales y piezas</h2>
+        <h2 style="margin-top:14px">Repuestos que hacen falta</h2><p class="hint" style="margin:-4px 0 8px">Escribe qué repuestos hacen falta y cuántos. El precio lo pone la oficina.</p>
         <div class="items">
-          <div class="items-head"><span>Pieza o material</span><span>Cant.</span><span>Precio u.</span><span></span></div>
+          <div class="items-head"><span>Repuesto</span><span>Cant.</span><span></span></div>
           <div id="t-items" class="items"></div>
-          <button type="button" id="btn-t-add" style="align-self:flex-start">+ Añadir pieza</button>
+          <button type="button" id="btn-t-add" style="align-self:flex-start">+ Añadir repuesto</button>
         </div>
         <label style="margin-top:12px">Observaciones<textarea id="t-obs" rows="2"></textarea></label>
-        <div class="totbox"><div><small id="t-totdet">Base 0,00 € · IVA 21 % 0,00 €</small><span id="t-totl">Total con IVA</span></div><strong id="t-tot">0,00 €</strong></div>
+        <div class="totbox"><div><small id="t-totdet">Base 0,00 € · IVA 21 % 0,00 €</small><span id="t-totl">Total con IVA</span></div><strong id="t-tot">0,00 €</strong></div><p class="hint" style="margin-top:6px">Los repuestos van aparte: su precio lo pone la oficina en el albarán final.</p>
         <div class="paybox"><div><small id="t-paydet">Tu parte del trabajo sin IVA</small>Lo que cobras</div><strong id="t-pay">0,00 €</strong></div>
       </section>
 
@@ -621,7 +621,7 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
       const row=document.createElement('div');row.className='item';
       row.innerHTML='<input id="m-d-'+i+'" aria-label="Pieza '+(i+1)+'">'+
         '<input id="m-q-'+i+'" class="num" type="number" min="0" step="any" inputmode="decimal" aria-label="Cantidad '+(i+1)+'">'+
-        '<input id="m-p-'+i+'" class="num" type="number" min="0" step="0.01" inputmode="decimal" aria-label="Precio '+(i+1)+'">'+
+        '<input id="m-p-'+i+'" hidden class="num" type="number" min="0" step="0.01" inputmode="decimal" aria-label="Precio '+(i+1)+'">'+
         '<button type="button" class="ghost" aria-label="Quitar pieza '+(i+1)+'">✕</button>';
       const[d,q,p,x]=row.children;d.value=it.d;q.value=it.q;p.value=it.p;
       d.addEventListener('input',()=>{it.d=d.value;refreshAlb()});
@@ -720,7 +720,7 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
     const rows=[];
     if(t.mo)rows.push(['Mano de obra / reparación'+(Number(b.h)?' ('+String(b.h).replace('.',',')+' h)':''),'1',eur(t.mo),eur(t.mo)]);
     if(t.des)rows.push(['Desplazamiento'+(a.zona?' · '+a.zona:''),'1',eur(b.pd),eur(t.des)]);
-    b.m.filter(i=>i.d||Number(i.p)).forEach(i=>rows.push([i.d,String(i.q).replace('.',','),eur(i.p),eur((Number(i.q)||0)*(Number(i.p)||0))]));
+    b.m.filter(i=>i.d||Number(i.p)).forEach(i=>rows.push(Number(i.p)?[i.d,String(i.q).replace('.',','),eur(i.p),eur((Number(i.q)||0)*(Number(i.p)||0))]:['Repuesto · '+i.d,String(i.q).replace('.',','),'—','Aparte']));
     const eq=[a.eq.t,a.eq.m,a.eq.o].filter(Boolean).join(' · ')+(a.eq.s?'\nN.º serie '+a.eq.s:'');
     const horas=[b.hin&&'Llegada '+b.hin,b.hout&&'Salida '+b.hout].filter(Boolean).join(' · ');
     return '<div class="s-in">'+
@@ -735,7 +735,7 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
       '<table class="s-table"><thead><tr><th>Concepto</th><th class="n">Cant.</th><th class="n">Precio u.</th><th class="n">Importe</th></tr></thead><tbody>'+
       (rows.map(r=>'<tr><td>'+esc(r[0])+'</td><td class="n">'+esc(r[1])+'</td><td class="n">'+r[2]+'</td><td class="n">'+r[3]+'</td></tr>').join('')||'<tr><td colspan="4" style="color:#8c96a3">Sin conceptos</td></tr>')+
       '</tbody></table>'+
-      '<div class="s-totals"><div><span>Base imponible</span><span>'+eur(t.base)+'</span></div><div><span>'+(t.siva?'IVA':'IVA '+IVA+' %')+'</span><span>'+(t.siva?'No incluido':eur(t.iva))+'</span></div><div class="grand"><span>Total</span><span>'+eur(t.total)+'</span></div></div>'+
+      '<div class="s-totals"><div><span>Base imponible</span><span>'+eur(t.base)+'</span></div><div><span>'+(t.siva?'IVA':'IVA '+IVA+' %')+'</span><span>'+(t.siva?'No incluido':eur(t.iva))+'</span></div><div class="grand"><span>Total</span><span>'+eur(t.total)+'</span></div></div>'+(b.m.some(i=>i.d&&!Number(i.p))?'<div class="s-txt"><b>Repuestos aparte:</b> el precio de los repuestos lo envía la oficina en el albarán final.</div>':'')+
       (b.obs?'<div><div class="s-k">Observaciones</div><div class="s-txt">'+esc(b.obs)+'</div></div>':'')+
       '<div class="s-sign"><div class="box"><div class="cap">Técnico · <b>'+esc(b.tec||'')+'</b></div></div>'+
       '<div class="box">'+sigSvg(b.sig)+'<div class="cap">Conforme cliente'+(b.fn?' · <b>'+esc(b.fn)+'</b>':'')+(b.fd?' · DNI '+esc(b.fd):'')+(b.sig.length?'':' · <b>sin firma</b>')+'</div></div></div>'+

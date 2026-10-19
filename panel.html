@@ -608,6 +608,9 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
   function wire(d,r){
     if(window.LBC_fotos)LBC_fotos(d.querySelector('[data-fotos]'),r.n);
     const n=r.n,re=()=>{OPEN.add(n);setTimeout(render,0)};
+    // los repuestos que pidió el técnico (sin precio) pasan una vez a «Repuestos SAT La Latina» para ponerles coste y precio
+    const pide=(r.b.m||[]).filter(i=>String(i.d||'').trim()&&!num(i.p));
+    if(!r.g.na&&!r.g.seed&&pide.length){setG(n,g=>{g.rep=(g.rep||[]).concat(pide.map(i=>({d:String(i.d).trim(),q:num(i.q)||1,c:0,p:0})));g.seed=1});re();return}
     d.querySelectorAll('.rp input').forEach(inp=>inp.addEventListener('change',()=>{setG(n,g=>{const x=g.rep[+inp.dataset.i];if(x)x[inp.dataset.k]=inp.dataset.k==='d'?inp.value:num(inp.value)});
       const nr=load().av.find(x=>x.n===n);if(!nr)return;r.g=nr.g;r.t=nr.t;dirty=true;
       d.querySelector('.kv').outerHTML=kvHtml(nr);d.querySelector('summary .amt').textContent=eur(nr.t.total)}));
@@ -723,7 +726,7 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
     const b=r.b,a=r.a,t=r.t,g=r.g,rows=[];
     if(t.mo)rows.push(['Mano de obra / reparación'+(num(b.h)?' ('+String(b.h).replace('.',',')+' h)':''),'1',eur(t.mo),eur(t.mo)]);
     if(t.des)rows.push(['Desplazamiento'+(a.zona?' · '+a.zona:''),'1',eur(b.pd),eur(t.des)]);
-    (b.m||[]).filter(i=>i.d||num(i.p)).forEach(i=>rows.push([i.d,String(i.q).replace('.',','),eur(i.p),eur(num(i.q)*num(i.p))]));
+    (b.m||[]).filter(i=>num(i.p)).forEach(i=>rows.push([i.d,String(i.q).replace('.',','),eur(i.p),eur(num(i.q)*num(i.p))])); // sin precio = ya están en repuestos
     (g.rep||[]).filter(i=>i.d||num(i.p)).forEach(i=>rows.push(['Repuesto · '+i.d,String(i.q).replace('.',','),eur(i.p),eur(num(i.q)*num(i.p))]));
     const eq=[a.eq.t,a.eq.m,a.eq.o].filter(Boolean).join(' · ')+(a.eq.s?'\nN.º serie '+a.eq.s:'');
     const horas=[b.hin&&'Llegada '+b.hin,b.hout&&'Salida '+b.hout].filter(Boolean).join(' · ');
