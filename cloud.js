@@ -69,6 +69,11 @@ body.rol-tec nav.tabs [data-p="p-aviso"],body.rol-tec nav.tabs [data-p="p-recibi
 .lbc-tec b{display:block;font-size:15.5px}.lbc-tec small{display:block;font-size:12.5px;color:var(--muted,#5b636d)}
 .lbc-tec .ap{color:#1f7a4a;font-weight:600}.lbc-tec .na{color:#b45309}
 .lbc-tec[aria-pressed="true"]{border:2px solid #ff5a1f;padding:7px 11px}
+.lbc-ph{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin-top:8px}
+.lbc-ph figure{position:relative;margin:0;aspect-ratio:1;border-radius:8px;overflow:hidden;background:#e9e6df}
+.lbc-ph a{display:block;height:100%}.lbc-ph img{width:100%;height:100%;object-fit:cover;display:block}
+.lbc-ph figure span{position:absolute;left:4px;bottom:4px;background:#ff5a1f;color:#fff;font-size:11px;padding:1px 6px;border-radius:4px}
+.lbc-ph figure button{position:absolute;top:4px;right:4px;width:30px;height:30px;border-radius:50%;border:0;background:rgba(0,0,0,.6);color:#fff;font-size:18px;line-height:1;padding:0;cursor:pointer}
 `;
   const st=document.createElement('style');st.textContent=css;document.head.appendChild(st);
   const LOGO='data:image/svg+xml;utf8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#1b2028"/><g fill="none" stroke-width="10"><polyline points="22,44 50,22 78,44" stroke="#ff5a1f"/><polyline points="22,60 50,38 78,60" stroke="#f4f1ea"/><polyline points="22,76 50,54 78,76" stroke="#5ec4f0"/></g></svg>');
@@ -152,7 +157,7 @@ body.rol-tec nav.tabs [data-p="p-aviso"],body.rol-tec nav.tabs [data-p="p-recibi
       if(PAGE!=='index.html'&&PAGE!==''){location.replace('index.html#tecnico');return false}
       document.body.classList.add('rol-tec');
       const t=document.getElementById('tab-tecnico');if(t&&t.getAttribute('aria-selected')!=='true')t.click();
-      misAvisosCard();outboxBtn();
+      misAvisosCard();outboxBtn();fotosCard();
     }
     if(OF(me.rol)){document.body.classList.add(me.rol==='gerente'?'rol-gerente':'rol-oficina');
       if(me.rol==='gerente'&&!DATOS.includes('lb-caja'))DATOS.push('lb-caja'); // la caja solo la ve y la toca el gerente
@@ -322,11 +327,12 @@ body.rol-tec nav.tabs [data-p="p-aviso"],body.rol-tec nav.tabs [data-p="p-recibi
   async function entregar(btn,quiet){
     await new Promise(r=>setTimeout(r,350)); // la app guarda el borrador con un pequeño retraso
     const B=lsGet('lbav-tdraft');if(!B||!B.a||!B.a.n){if(!quiet)toastNew('Carga primero un aviso.');return}
+    if(!quiet&&!(await nFotos(B.a.n))){toastNew('Haz al menos una foto del trabajo antes de entregar el albarán.');const fc=document.getElementById('lbc-fotos');if(fc)fc.scrollIntoView({behavior:'smooth',block:'center'});return}
     if(!quiet&&!(B.sig&&B.sig.length)&&!confirm('Falta la firma del cliente. ¿Entregar igualmente?'))return;
     const alb=Object.assign({},B);delete alb.a;alb.a=B.a; // el albarán lleva su aviso, como en el enlace de WhatsApp
     const ob=lsGet(OUTBOX)||{};ob[B.a.n]=alb;lsSet(OUTBOX,ob);
     if(btn){btn.disabled=true;btn.textContent='Entregando…'}
-    const ok=await flushOutbox();
+    await flushFotos();const ok=await flushOutbox();
     if(btn){btn.disabled=false;btn.textContent='Entregar albarán a la oficina'}
     if(ok)toastNew('Albarán '+B.a.n+' entregado a la oficina ✓');
     else if(!quiet)toastNew('Sin conexión: se entregará solo cuando vuelva la cobertura.');
@@ -344,6 +350,58 @@ body.rol-tec nav.tabs [data-p="p-aviso"],body.rol-tec nav.tabs [data-p="p-recibi
     lsSet(OUTBOX,ob);return ok;
   }
 
+
+  // ---------- Fotos del trabajo: el técnico las hace en el albarán, la oficina las ve en el Panel ----------
+  // Van a Storage (fotos/<nº aviso>/<id>.jpg). Primero a una cola en el móvil (IndexedDB) para no perderlas sin cobertura.
+  const FB='fotos';let fotoN=null,fotoRemote=[];const objU=[];
+  const curN=()=>{const B=lsGet('lbav-tdraft');return(B&&B.a&&B.a.n)||''};
+  const fotoDB=()=>new Promise((res,rej)=>{const r=indexedDB.open('lbc-fotoq',1);r.onupgradeneeded=()=>r.result.createObjectStore('q',{keyPath:'id'});r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
+  async function qAll(){try{const d=await fotoDB();return await new Promise(r=>{const g=d.transaction('q').objectStore('q').getAll();g.onsuccess=()=>r(g.result||[]);g.onerror=()=>r([])})}catch(e){return[]}}
+  async function qPut(o){const d=await fotoDB();return new Promise((r,j)=>{const t=d.transaction('q','readwrite');t.objectStore('q').put(o);t.oncomplete=r;t.onerror=()=>j(t.error)})}
+  async function qDel(id){try{const d=await fotoDB();await new Promise(r=>{const t=d.transaction('q','readwrite');t.objectStore('q').delete(id);t.oncomplete=r;t.onerror=r})}catch(e){}}
+  function shrink(file){return new Promise((res,rej)=>{const u=URL.createObjectURL(file),im=new Image();
+    im.onload=()=>{const k=Math.min(1,1600/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);c.toBlob(b=>b?res(b):rej(new Error('foto')),'image/jpeg',.75)};
+    im.onerror=()=>{URL.revokeObjectURL(u);rej(new Error('foto'))};im.src=u})}
+  let flushing=null;
+  function flushFotos(){if(flushing)return flushing;flushing=(async()=>{let ok=true;
+    for(const o of await qAll()){try{const r=await sb.storage.from(FB).upload(o.n+'/'+o.id+'.jpg',o.blob,{contentType:'image/jpeg',upsert:false});
+      if(r.error&&!/exist|duplicate/i.test(r.error.message||''))throw r.error;await qDel(o.id)}catch(e){ok=false;break}}
+    return ok})().finally(()=>{flushing=null});return flushing}
+  async function listFotos(n){const r=await sb.storage.from(FB).list(n,{limit:100,sortBy:{column:'name',order:'asc'}});if(r.error)throw r.error;
+    const ps=(r.data||[]).filter(f=>/\.jpg$/i.test(f.name||'')).map(f=>n+'/'+f.name);if(!ps.length)return[];
+    const s=await sb.storage.from(FB).createSignedUrls(ps,3600);if(s.error)throw s.error;return(s.data||[]).map((x,i)=>({p:ps[i],u:x.signedUrl})).filter(x=>x.u)}
+  async function nFotos(n){let k=(await qAll()).filter(o=>o.n===n).length;try{k+=(await listFotos(n)).length}catch(e){k+=fotoRemote.length}return k}
+  function fotosCard(){
+    const sig=document.getElementById('sig'),sec=sig&&sig.closest('section');if(!sec||document.getElementById('lbc-fotos'))return;
+    const c=document.createElement('section');c.className='card';c.id='lbc-fotos';
+    c.innerHTML='<h2>Fotos del trabajo</h2><p class="hint">Haz fotos del equipo, de la avería y de la pieza que hay que cambiar. La oficina las ve con el albarán. Hace falta al menos una para entregarlo.</p><div class="ph"></div>'+
+      '<input type="file" accept="image/*" capture="environment" hidden><input type="file" accept="image/*" multiple hidden>'+
+      '<div class="bar" style="margin-top:10px"><button type="button" class="primary" data-cam>📷 Hacer foto</button><button type="button" data-gal>Elegir de la galería</button></div>';
+    sec.parentNode.insertBefore(c,sec);
+    const [cam,gal]=c.querySelectorAll('input');c.querySelector('[data-cam]').onclick=()=>cam.click();c.querySelector('[data-gal]').onclick=()=>gal.click();
+    [cam,gal].forEach(i=>i.onchange=async()=>{const n=curN(),fs=[...i.files];i.value='';if(!n){toastNew('Carga primero un aviso.');return}
+      for(const f of fs){try{await qPut({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),n,blob:await shrink(f)})}catch(e){toastNew('No se pudo leer la foto.')}}
+      await drawFotos(false);const ok=await flushFotos();if(!ok)toastNew('Sin cobertura: las fotos se subirán solas cuando vuelva.');drawFotos(true)});
+    setInterval(()=>{if(curN()!==fotoN)drawFotos(true)},1500);
+    window.addEventListener('online',()=>flushFotos().then(()=>drawFotos(true)));
+    drawFotos(true);flushFotos().then(()=>drawFotos(true));
+  }
+  async function drawFotos(refresh){
+    const box=document.querySelector('#lbc-fotos .ph');if(!box)return;const n=curN();
+    if(n!==fotoN){fotoN=n;fotoRemote=[];refresh=true}
+    if(!n){box.innerHTML='<p class="hint">Carga un aviso para hacer fotos.</p>';return}
+    if(refresh){try{fotoRemote=await listFotos(n)}catch(e){}}
+    if(n!==fotoN)return;
+    const q=(await qAll()).filter(o=>o.n===n);objU.splice(0).forEach(u=>URL.revokeObjectURL(u));
+    const items=fotoRemote.map(x=>({u:x.u,p:x.p})).concat(q.map(o=>{const u=URL.createObjectURL(o.blob);objU.push(u);return{u,q:o.id}}));
+    box.innerHTML=items.length?'<div class="lbc-ph">'+items.map(x=>'<figure><img src="'+esc(x.u)+'" alt="Foto del trabajo">'+(x.q?'<span>Sin subir</span>':'')+'<button type="button" aria-label="Quitar foto" data-p="'+esc(x.p||'')+'" data-q="'+esc(x.q||'')+'">×</button></figure>').join('')+'</div>':'<p class="hint"><b>Todavía no hay fotos.</b></p>';
+    box.querySelectorAll('button').forEach(b=>b.onclick=async()=>{if(!confirm('¿Quitar esta foto?'))return;
+      if(b.dataset.q)await qDel(b.dataset.q);else{const r=await sb.storage.from(FB).remove([b.dataset.p]);if(r.error){toastNew('No se pudo quitar la foto.');return}}drawFotos(true)});
+  }
+  // Panel → Albaranes: fotos del técnico (panel.html llama a LBC_fotos al abrir un albarán)
+  window.LBC_fotos=async(el,n)=>{if(!el)return;
+    try{const l=await listFotos(n);el.innerHTML=l.length?l.map(x=>'<figure><a href="'+esc(x.u)+'" target="_blank" rel="noopener"><img src="'+esc(x.u)+'" alt="Foto del técnico" loading="lazy"></a></figure>').join(''):'<p class="hint" style="grid-column:1/-1">El técnico no ha puesto fotos.</p>'}
+    catch(e){el.innerHTML='<p class="hint" style="grid-column:1/-1">No se pudieron cargar las fotos (sin conexión).</p>'}};
 
   // ---------- Oficina: técnicos para elegir en el aviso ----------
   function tecList(){

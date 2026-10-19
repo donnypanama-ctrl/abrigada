@@ -580,6 +580,7 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
     return '<div class="det"><div>'+
       '<h3>Trabajo del técnico</h3><div class="txt">'+(esc(b.w)||'—')+'</div>'+
       (b.obs?'<h3 style="margin-top:10px">Condiciones / observaciones</h3><div class="txt">'+esc(b.obs)+'</div>':'')+
+      (window.LBC_fotos?'<h3 style="margin-top:10px">Fotos del técnico</h3><div class="lbc-ph" data-fotos><p class="hint" style="grid-column:1/-1">Cargando fotos…</p></div>':'')+
       '<h3 style="margin-top:10px">Cliente</h3><div class="txt">'+esc([a.cl.n,a.cl.c,a.cl.t,a.cl.d].filter(Boolean).join('\n')||'—')+'</div>'+
       '</div><div>'+
       '<h3>Coste de la reparación</h3>'+kvHtml(r)+
@@ -599,6 +600,7 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
   }
   document.addEventListener('focusout',()=>{if(dirty)setTimeout(()=>{if(dirty&&!(document.activeElement&&document.activeElement.closest&&document.activeElement.closest('.rp'))){dirty=false;render()}},300)});
   function wire(d,r){
+    if(window.LBC_fotos)LBC_fotos(d.querySelector('[data-fotos]'),r.n);
     const n=r.n,re=()=>{OPEN.add(n);setTimeout(render,0)};
     d.querySelectorAll('.rp input').forEach(inp=>inp.addEventListener('change',()=>{setG(n,g=>{const x=g.rep[+inp.dataset.i];if(x)x[inp.dataset.k]=inp.dataset.k==='d'?inp.value:num(inp.value)});
       const nr=load().av.find(x=>x.n===n);if(!nr)return;r.g=nr.g;r.t=nr.t;dirty=true;
