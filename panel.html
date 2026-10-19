@@ -481,7 +481,7 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
     daily(albP,lbl);
     byTec(albP,lbl);
     clients(D);
-    reps(albP,lbl);
+    reps(albP.filter(r=>r.g.na),lbl); // solo albaranes emitidos: si el cliente no aprueba, no hay repuesto que pagar
     caja(D,R,lbl);
   }
 
@@ -680,7 +680,7 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
   function reps(albP,lbl){
     $('r-sub').textContent=lbl;
     const l=[];albP.forEach(r=>(r.g.rep||[]).forEach(x=>l.push({r,x})));
-    if(!l.length){$('reps').innerHTML='<p class="hint">Sin repuestos '+esc(lbl)+'. Se añaden en cada albarán, en la sección Albaranes.</p>';return}
+    if(!l.length){$('reps').innerHTML='<p class="hint">Sin repuestos '+esc(lbl)+'. Aquí salen los repuestos de los albaranes ya emitidos; los que aún no has emitido no cuentan.</p>';return}
     const c=l.reduce((s,o)=>s+num(o.x.q)*num(o.x.c),0),p=l.reduce((s,o)=>s+num(o.x.q)*num(o.x.p),0);
     const ci=Math.round(c*IVA)/100,ct=Math.round((c+ci)*100)/100; // SAT La Latina es otra empresa: factura con IVA
     const pg=pagado(range(P),x=>x.t==='rep');
