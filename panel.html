@@ -69,8 +69,10 @@ h2{font-family:var(--display);font-weight:600;font-size:15px;letter-spacing:.12e
 h2 small{font-family:var(--body);letter-spacing:0;text-transform:none;color:var(--muted);font-weight:500;font-size:12.5px;margin-left:6px}
 .hint{font-size:13px;color:var(--muted);margin:0}
 
-.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}
-@media (max-width:820px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:12px}
+@media (max-width:1100px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:820px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.kpi.win{grid-column:1/-1}}
+.kpi.win{border-left:4px solid var(--ok)}.kpi.win b{color:var(--ok)}
 .kpi{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px;min-width:0;text-decoration:none;color:inherit;display:block}
 a.kpi:hover{border-color:var(--muted)}
 .kpi small{display:block;font-size:12.5px;color:var(--muted);font-weight:500}
@@ -185,6 +187,9 @@ input.full{width:100%;margin-bottom:8px}
 .kv span:nth-child(even){text-align:right;white-space:nowrap}
 .kv .t{font-weight:700;border-top:1px solid var(--line);padding-top:4px;margin-top:2px}
 .kv .m{color:var(--muted)}
+.kv .gn{font-weight:700;color:var(--ok);border-top:1px solid var(--line);padding-top:4px;margin-top:2px}
+.kv .gn.neg,.g-alb .amt small.neg{color:var(--danger)}
+.g-alb .amt small{color:var(--ok);font-weight:600}
 .rp{display:grid;grid-template-columns:minmax(0,1fr) 46px 74px 74px 28px;gap:4px;align-items:center;font-size:13px;font-variant-numeric:tabular-nums}
 .rp input{font:inherit;font-size:16px;color:var(--fg);background:var(--field);border:1px solid var(--line);border-radius:5px;padding:5px 6px;min-width:0;width:100%}
 .rp .h{font-size:11.5px;color:var(--muted);font-weight:600}
@@ -437,6 +442,8 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
   // Los repuestos de SAT La Latina no se reparten: el técnico cobra sobre su trabajo
   const payBase=r=>Math.max(0,r.t.mo+r.t.des);
   const payOf=r=>Math.round(payBase(r)*num(PAY.pct))/100;
+  // Ganancia de La Brigada en un albarán: lo facturado sin IVA − lo que cobra el técnico − lo que cuestan los repuestos a SAT La Latina (sin IVA)
+  const gan=r=>Math.round((r.t.base-payOf(r)-r.t.rc)*100)/100;
   let P='mes';try{P=sessionStorage.getItem('lb-panel-p')||P}catch(e){}
   function range(p){
     const d=new Date(),y=d.getFullYear(),m=d.getMonth();
@@ -472,7 +479,9 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
     $('sub').textContent=D.av.length||D.qs.length?'Resumen '+lbl+'. Datos de este dispositivo.':'Avisos, albaranes y cotizaciones de un vistazo.';
 
     // KPIs
+    const albE=albP.filter(r=>r.g.na),ganE=albE.reduce((s,r)=>s+gan(r),0),ganC=albE.filter(r=>r.g.cob).reduce((s,r)=>s+gan(r),0);
     $('kpis').innerHTML=
+      '<a class="kpi win" href="#sec-albs"><small>Ganancia</small><b>'+eur0(ganE)+'</b><span>'+(albE.length?albE.length+' emitido'+(albE.length===1?'':'s')+' · ya cobrada '+eur0(ganC)+' · sin cobrar '+eur0(ganE-ganC):'sin albaranes emitidos '+lbl)+'</span></a>'+
       '<a class="kpi hot" href="index.html#p-lista"><small>Facturado (albaranes)</small><b>'+eur0(fact)+'</b><span>'+albP.length+' albarán'+(albP.length===1?'':'es')+' · sin IVA '+eur0(base)+' · técnicos '+eur0(albP.reduce((s,r)=>s+payOf(r),0))+'</span></a>'+
       '<a class="kpi" href="#sec-albs"><small>Por emitir</small><b>'+porEm.length+'</b><span>'+eur0(porEm.reduce((s,r)=>s+r.t.total,0))+' · '+avP.length+' avisos '+lbl+'</span></a>'+
       '<a class="kpi cold" href="index.html#p-lista"><small>Esperando albarán</small><b>'+sinAlb.length+'</b><span>'+(pend.length?pend.length+' trabajo'+(pend.length===1?'':'s')+' sin terminar':'avisos enviados sin respuesta')+'</span></a>'+
@@ -547,6 +556,7 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
   $('a-q').addEventListener('input',()=>render());
   const FP={efectivo:'efectivo',tarjeta:'tarjeta'};
   const stChip=r=>r.g.na?(r.g.cob?'<span class="chip done">Cobrado'+(FP[r.g.fp]?' · '+FP[r.g.fp]:'')+'</span>':'<span class="chip em">'+esc(r.g.na)+'</span>'):(r.st==='pend'?'<span class="chip pend">Trabajo sin terminar</span>':'<span class="chip sent">Por emitir</span>');
+  const amtHtml=r=>'<span class="amt">'+eur(r.t.total)+'<small'+(gan(r)<0?' class="neg"':'')+'>gana '+eur(gan(r))+'</small></span>';
   function albs(av,R,lbl){
     const q=$('a-q').value.trim().toLowerCase();
     let l=av.filter(r=>r.b);
@@ -558,9 +568,9 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
     l.sort((a,b)=>(b.fb||'').localeCompare(a.fb||'')||b.ts-a.ts);
     const box=$('albs');
     if(!l.length){box.innerHTML='<div class="empty"><b>'+(AF==='pend'?'Nada por emitir':'Sin albaranes')+'</b><p class="hint">'+(av.some(r=>r.b)?'Prueba otro filtro o periodo.':'Cuando un técnico te devuelva un albarán y lo abras en «Recibir albarán», aparecerá aquí.')+'</p></div>';return}
-    const sum=l.reduce((s,r)=>s+r.t.total,0);
-    box.innerHTML='<div class="rows">'+l.map(r=>'<details id="a-'+esc(r.n)+'" data-n="'+esc(r.n)+'"'+(OPEN.has(r.n)?' open':'')+'><summary class="g-alb"><div><b>'+esc(r.n)+'</b> '+stChip(r)+'<small>'+esc(dShort(r.fb)+' · '+(r.cl||'Sin cliente')+' · '+(r.tec||'sin técnico'))+'</small></div><span class="amt">'+eur(r.t.total)+'</span></summary><div class="dbody"></div></details>').join('')+
-      '<div class="tot g-alb"><span>'+l.length+' albarán'+(l.length===1?'':'es')+'</span><span class="n">'+eur(sum)+'</span></div></div>';
+    const sum=l.reduce((s,r)=>s+r.t.total,0),sg=l.reduce((s,r)=>s+gan(r),0);
+    box.innerHTML='<div class="rows">'+l.map(r=>'<details id="a-'+esc(r.n)+'" data-n="'+esc(r.n)+'"'+(OPEN.has(r.n)?' open':'')+'><summary class="g-alb"><div><b>'+esc(r.n)+'</b> '+stChip(r)+'<small>'+esc(dShort(r.fb)+' · '+(r.cl||'Sin cliente')+' · '+(r.tec||'sin técnico'))+'</small></div>'+amtHtml(r)+'</summary><div class="dbody"></div></details>').join('')+
+      '<div class="tot g-alb"><span>'+l.length+' albarán'+(l.length===1?'':'es')+'</span><span class="n amt">'+eur(sum)+'<small>ganancia '+eur(sg)+'</small></span></div></div>';
     box.querySelectorAll('details').forEach(d=>{
       const r=l.find(x=>x.n===d.dataset.n);
       const fill=()=>{d.querySelector('.dbody').innerHTML=detail(r);wire(d,r)};
@@ -576,8 +586,9 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
       (t.mat?kv('Piezas del técnico',eur(t.mat)):'')+
       kv('Repuestos SAT La Latina',eur(t.rp))+
       kv('Base imponible',eur(t.base),'t')+kv(t.siva?'Sin IVA':'IVA '+IVA+' %',eur(t.iva))+kv('Total',eur(t.total),'t')+
-      kv('Técnico ('+num(PAY.pct).toLocaleString('es-ES')+' %)',eur(payOf(r)),'m')+
-      (t.rp?kv('Margen repuestos',eur(t.rp-t.rc),'m'):'')+'</div>';
+      kv('− Técnico ('+num(PAY.pct).toLocaleString('es-ES')+' %)',eur(payOf(r)),'m')+
+      (t.rc?kv('− Coste repuestos SAT (sin IVA)',eur(t.rc),'m'):'')+
+      kv('Ganancia La Brigada',eur(gan(r)),'gn'+(gan(r)<0?' neg':''))+'</div>';
   }
   function detail(r){
     const b=r.b,a=r.a,t=r.t,g=r.g,lock=!!g.na;
@@ -613,7 +624,7 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
     if(!r.g.na&&!r.g.seed&&pide.length){setG(n,g=>{g.rep=(g.rep||[]).concat(pide.map(i=>({d:String(i.d).trim(),q:num(i.q)||1,c:0,p:0})));g.seed=1});re();return}
     d.querySelectorAll('.rp input').forEach(inp=>inp.addEventListener('change',()=>{setG(n,g=>{const x=g.rep[+inp.dataset.i];if(x)x[inp.dataset.k]=inp.dataset.k==='d'?inp.value:num(inp.value)});
       const nr=load().av.find(x=>x.n===n);if(!nr)return;r.g=nr.g;r.t=nr.t;dirty=true;
-      d.querySelector('.kv').outerHTML=kvHtml(nr);d.querySelector('summary .amt').textContent=eur(nr.t.total)}));
+      d.querySelector('.kv').outerHTML=kvHtml(nr);d.querySelector('summary .amt').outerHTML=amtHtml(nr)}));
     d.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>{setG(n,g=>g.rep.splice(+b.dataset.del,1));re()}));
     const add=d.querySelector('[data-add]');if(add)add.addEventListener('click',()=>{setG(n,g=>{g.rep=g.rep||[];g.rep.push({d:'',q:1,c:0,p:0})});re();setTimeout(()=>{const l=document.querySelectorAll('#a-'+CSS.escape(n)+' .rp input[data-k="d"]');if(l.length)l[l.length-1].focus()},50)});
     const em=d.querySelector('[data-emit]');if(em)em.addEventListener('click',async()=>{
