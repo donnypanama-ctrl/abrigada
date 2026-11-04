@@ -189,6 +189,8 @@ input.full{width:100%;margin-bottom:8px}
 .kv .m{color:var(--muted)}
 .pgl{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:4px 10px;align-items:center;font-size:13.5px;font-variant-numeric:tabular-nums;margin-bottom:6px}
 .pgl button{padding:2px 8px;font-size:13px}
+.pgl small{display:block}.pgl.gx .gxb{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+.edt.gxf select{font:inherit;font-size:15px;padding:6px 8px;border-radius:5px;border:1px solid var(--line,#dcd8cf);background:var(--field,#faf8f4);color:inherit}
 .edt.pga label{display:flex;flex-direction:column;gap:2px;font-size:12.5px;color:var(--muted,#5b636d)}
 .edt.pga input{width:130px;font:inherit;font-size:15px;padding:6px 8px;border-radius:5px;border:1px solid var(--line,#dcd8cf);background:var(--field,#faf8f4);color:inherit}.edt.pga input[data-pgi]{text-align:right}
 .kv .gn{font-weight:700;color:var(--ok);border-top:1px solid var(--line);padding-top:4px;margin-top:2px}
@@ -306,6 +308,13 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
       </div>
       <input id="a-q" type="search" placeholder="Buscar cliente o aviso" autocomplete="off">
     </div>
+    <details class="tbl" id="a-cot"><summary>+ Albarán desde una cotización</summary>
+      <div class="gform">
+        <label class="full">Cotización<select id="a-cot-q"></select></label>
+        <p class="hint full">Para trabajos sin técnico de la casa (herrero, carpintero…). Crea el albarán con el cliente y las partidas de la cotización; luego apuntas los gastos del trabajo y los pagos del cliente.</p>
+        <button type="button" class="primary full" id="a-cot-go">Crear albarán</button>
+      </div>
+    </details>
     <div id="albs"></div>
   </section>
 
@@ -454,7 +463,11 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
   const payBase=r=>Math.max(0,r.t.mo+r.t.des);
   const payOf=r=>Math.round(payBase(r)*num(PAY.pct))/100;
   // Ganancia de La Brigada en un albarán: lo facturado sin IVA − lo que cobra el técnico − lo que cuestan los repuestos a SAT La Latina (sin IVA)
-  const gan=r=>Math.round((r.t.base-payOf(r)-r.t.rc)*100)/100;
+  // Gastos del trabajo (subcontrata, materiales) por albarán: g.gx=[{id,d,t:'sub'|'mat',imp(sin IVA),iva,pag:fecha|null,fp,cid}]
+  const gxs=g=>Array.isArray(g&&g.gx)?g.gx:[];
+  const gxTot=r=>gxs(r.g).reduce((s,x)=>s+num(x.imp),0);
+  const gxPay=x=>Math.round(num(x.imp)*(x.iva?1+IVA/100:1)*100)/100; // lo que sale de caja
+  const gan=r=>Math.round((r.t.base-payOf(r)-r.t.rc-gxTot(r))*100)/100;
   let P='mes';try{P=sessionStorage.getItem('lb-panel-p')||P}catch(e){}
   function range(p){
     const d=new Date(),y=d.getFullYear(),m=d.getMonth();
@@ -566,9 +579,32 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
   document.querySelectorAll('#a-f button').forEach(b=>b.addEventListener('click',()=>{AF=b.dataset.f;document.querySelectorAll('#a-f button').forEach(x=>x.setAttribute('aria-pressed',x===b));render()}));
   $('a-q').addEventListener('input',()=>render());
   const FP={efectivo:'efectivo',tarjeta:'tarjeta'};
-  const stChip=r=>r.g.na?(r.g.cob?'<span class="chip done">Cobrado'+(pgs(r.g).length>1?' · a plazos':FP[r.g.fp]?' · '+FP[r.g.fp]:'')+'</span>':'<span class="chip em">'+esc(r.g.na)+(pgs(r.g).length?' · falta '+eur(faltaAlb(r)):'')+'</span>'):(r.st==='pend'?'<span class="chip pend">Trabajo sin terminar</span>':'<span class="chip sent">Por emitir</span>');
+  const stChip=r=>r.g.na?(r.g.cob?'<span class="chip done">Cobrado'+(pgs(r.g).length>1?' · a plazos':FP[r.g.fp]?' · '+FP[r.g.fp]:'')+'</span>':'<span class="chip em">'+esc(r.g.na)+(pgs(r.g).length?' · falta '+eur(faltaAlb(r)):'')+'</span>'):(r.st==='pend'?'<span class="chip pend">Trabajo sin terminar</span>':'<span class="chip sent">Por emitir'+(pgs(r.g).length?' · a cuenta '+eur(pagadoAlb(r)):'')+'</span>');
   const amtHtml=r=>'<span class="amt">'+eur(r.t.total)+'<small'+(gan(r)<0?' class="neg"':'')+'>gana '+eur(gan(r))+'</small></span>';
+  function cotOpts(av){
+    const used=new Set(av.map(r=>r.a.cot).filter(Boolean)),sel=$('a-cot-q'),cur=sel.value;
+    const l=(get('lb2-hist')||[]).filter(q=>q&&q.num&&!used.has(q.num)&&q.estado!=='Rechazada').reverse();
+    sel.innerHTML=l.length?l.map(q=>'<option value="'+esc(q.num)+'">'+esc(q.num+' · '+((q.client&&q.client.name)||'Sin cliente')+' · '+eur(quoteTot(q).total)+(q.estado==='Aceptada'?' · aceptada':''))+'</option>').join(''):'<option value="">No hay cotizaciones sin albarán</option>';
+    if(cur&&l.some(q=>q.num===cur))sel.value=cur;
+  }
+  $('a-cot-go').addEventListener('click',()=>{
+    const num0=$('a-cot-q').value,q=(get('lb2-hist')||[]).find(x=>x&&x.num===num0);if(!q){toast('Elige una cotización');return}
+    const list=get('lbav-list')||[];if(list.some(r=>r&&r.a&&r.a.cot===q.num)){toast('Esa cotización ya tiene albarán');return}
+    const seq=Math.max(num(get('lbav-seq')),...list.map(r=>{const m=/(\d+)$/.exec((r&&r.a&&r.a.n)||'');return m?Number(m[1]):0}))+1;
+    const y=new Date().getFullYear(),n='AV-'+y+'-'+String(seq).padStart(3,'0'),f=iso(new Date()),c=q.client||{};
+    const m=(q.items||[]).map(i=>({d:[i.n,i.d].filter(Boolean).join(' · ').replace(/\n+/g,' '),q:num(i.q)||1,p:Math.round(lineTotal(i)/(num(i.q)||1)*100)/100}));
+    if(num(q.disc))m.push({d:'Descuento',q:1,p:-num(q.disc)});
+    const it={a:{n,f,cot:q.num,pr:'normal',av:'',cl:{n:c.name||'',c:c.att||'',t:c.tel||'',d:[c.addr,c.ruc?'CIF: '+c.ruc:''].filter(Boolean).join(' · ')},eq:{t:q.subject||'Trabajo según presupuesto '+q.num,m:'',o:'',s:''}},
+      b:{f,tec:'',st:'Resuelto',w:(q.subject?q.subject+'\n':'')+'Según presupuesto '+q.num+'.',mo:0,cd:false,pd:0,h:0,m,siva:num(q.tax)===0},st:'done',ts:Date.now()};
+    list.push(it);
+    try{localStorage.setItem('lbav-list',JSON.stringify(list));localStorage.setItem('lbav-seq',JSON.stringify(seq))}catch(e){toast('No se pudo guardar');return}
+    // si se hace el trabajo, la cotización queda aceptada
+    const h=get('lb2-hist')||[];const hq=h.find(x=>x&&x.num===q.num);if(hq&&hq.estado!=='Aceptada'){hq.estado='Aceptada';try{localStorage.setItem('lb2-hist',JSON.stringify(h))}catch(e){}}
+    $('a-cot').open=false;AF='pend';document.querySelectorAll('#a-f button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.f==='pend'));
+    OPEN.add(n);toast('Albarán creado desde '+q.num);render();setTimeout(()=>{const el=document.getElementById('a-'+n);if(el)el.scrollIntoView({behavior:'smooth',block:'start'})},100);
+  });
   function albs(av,R,lbl){
+    cotOpts(av);
     const q=$('a-q').value.trim().toLowerCase();
     let l=av.filter(r=>r.b);
     if(AF==='pend')l=l.filter(r=>!r.g.na);
@@ -594,20 +630,32 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
     return '<div class="kv">'+
       (t.mo?kv('Mano de obra'+(num(b.ph)&&(b.mo===undefined||b.mo==='')?' · '+String(b.h).replace('.',',')+' h × '+eur(b.ph):(num(b.h)?' · '+String(b.h).replace('.',',')+' h':'')),eur(t.mo)):'')+
       (t.des?kv('Desplazamiento'+(r.a.zona?' · '+esc(r.a.zona):''),eur(t.des)):'')+
-      (t.mat?kv('Piezas del técnico',eur(t.mat)):'')+
+      (t.mat?kv(r.a.cot?'Partidas del presupuesto '+esc(r.a.cot):'Piezas del técnico',eur(t.mat)):'')+
       kv('Repuestos SAT La Latina',eur(t.rp))+
       kv('Base imponible',eur(t.base),'t')+kv(t.siva?'Sin IVA':'IVA '+IVA+' %',eur(t.iva))+kv('Total',eur(t.total),'t')+
-      kv('− Técnico ('+num(PAY.pct).toLocaleString('es-ES')+' %)',eur(payOf(r)),'m')+
+      (payOf(r)||r.tec?kv('− Técnico ('+num(PAY.pct).toLocaleString('es-ES')+' %)',eur(payOf(r)),'m'):'')+
       (t.rc?kv('− Coste repuestos SAT (sin IVA)',eur(t.rc),'m'):'')+
+      (gxTot(r)?kv('− Gastos del trabajo (sin IVA)',eur(gxTot(r)),'m'):'')+
       kv('Ganancia La Brigada',eur(gan(r)),'gn'+(gan(r)<0?' neg':''))+'</div>';
   }
   function pgHtml(r){
     const l=pgs(r.g),falta=faltaAlb(r);
+    if(!r.g.na&&!l.length&&r.st==='pend')return '';
     return '<h3 style="margin-top:12px">Pagos del cliente</h3>'+
       (l.length?'<div class="pgl">'+l.map(x=>'<span>'+esc(dShort(x.f))+' · '+(x.fp==='efectivo'?'efectivo':'tarjeta')+(x.resto?' · resto':'')+'</span><b>'+eur(num(x.imp))+'</b><button type="button" data-pgdel="'+esc(x.id)+'" aria-label="Borrar pago">✕</button>').join('')+'</div>':'')+
       '<div class="kv"><span>Pagado</span><span>'+eur(pagadoAlb(r))+'</span><span class="t">Falta por cobrar</span><span class="t">'+eur(falta)+'</span></div>'+
       (falta>0.004&&!r.g.cob?'<div class="edt pga"><label>Pago a cuenta (€)<input data-pgi inputmode="decimal" placeholder="0,00"></label><label>Fecha<input data-pgf type="date" value="'+iso(new Date())+'"></label></div>'+
         '<div class="acts" style="margin-top:0"><button type="button" class="btn" data-pga="efectivo">Apuntar pago en efectivo</button><button type="button" class="btn" data-pga="tarjeta">Apuntar pago con tarjeta</button></div>':'');
+  }
+  const GXT={sub:'Subcontrata',mat:'Materiales'};
+  function gxHtml(r){
+    const l=gxs(r.g);
+    return '<h3 style="margin-top:12px">Gastos del trabajo</h3>'+
+      (l.length?'<div class="pgl gx">'+l.map(x=>'<span>'+esc((GXT[x.t]||'Gasto')+(x.d?' · '+x.d:''))+'<small class="hint">'+(x.pag?'pagado el '+esc(dShort(x.pag))+(x.fp==='efectivo'?' en efectivo':' por banco'):'pendiente de pagar')+(x.iva?' · con IVA '+esc(eur(gxPay(x))):'')+'</small></span><b>'+eur(num(x.imp))+'</b>'+
+        '<span class="gxb">'+(x.pag?'':'<button type="button" data-gxp="'+esc(x.id)+'" data-fp="efectivo">Pagar efectivo</button><button type="button" data-gxp="'+esc(x.id)+'" data-fp="banco">Pagar banco</button>')+'<button type="button" data-gxdel="'+esc(x.id)+'" aria-label="Borrar gasto">✕</button></span>').join('')+'</div>':'<p class="hint">Sin gastos. Apunta aquí lo que pagas al herrero, carpintero o en materiales para este trabajo.</p>')+
+      '<div class="edt pga gxf"><label>Concepto<input data-gxd placeholder="Ej. Herrero, rejilla…" style="width:170px;text-align:left"></label><label>Tipo<select data-gxt><option value="sub">Subcontrata</option><option value="mat">Materiales</option></select></label><label>Importe sin IVA (€)<input data-gxi inputmode="decimal" placeholder="0,00"></label>'+
+      '<label class="siva" style="flex-direction:row;align-items:center"><input type="checkbox" data-gxv> Me lo factura con IVA</label></div>'+
+      '<div class="acts" style="margin-top:0"><button type="button" class="btn" data-gxa="">Añadir (pendiente de pagar)</button><button type="button" class="btn" data-gxa="efectivo">Añadir pagado en efectivo</button><button type="button" class="btn" data-gxa="banco">Añadir pagado por banco</button></div>';
   }
   function detail(r){
     const b=r.b,a=r.a,t=r.t,g=r.g,lock=!!g.na;
@@ -626,7 +674,7 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
           '<input data-i="'+i+'" data-k="d" value="'+esc(x.d)+'" aria-label="Repuesto"><input data-i="'+i+'" data-k="q" inputmode="decimal" class="n" value="'+esc(x.q)+'" aria-label="Cantidad"><input data-i="'+i+'" data-k="c" inputmode="decimal" class="n" value="'+esc(x.c)+'" aria-label="Coste"><input data-i="'+i+'" data-k="p" inputmode="decimal" class="n" value="'+esc(x.p)+'" aria-label="Precio al cliente"><button type="button" data-del="'+i+'" aria-label="Quitar">✕</button>').join('')+
       '</div>'+(lock?((g.rep||[]).length?'':'<p class="hint">Sin repuestos.</p>'):'<button type="button" class="btn" data-add style="margin-top:6px;padding:6px 10px;font-size:13px">+ Añadir repuesto</button><p class="hint" style="margin-top:4px">Coste = lo que te cobra SAT La Latina, sin IVA. Precio = lo que pagará el cliente.</p>')+
       (lock?(t.siva?'<p class="hint" style="margin-top:10px"><b>Albarán sin IVA.</b></p>':''):'<label class="siva"><input type="checkbox" data-siva'+(t.siva?' checked':'')+'> Hacer el albarán sin IVA (el cliente lo pide así)</label>')+
-      (lock?pgHtml(r):'')+
+      gxHtml(r)+pgHtml(r)+
       '<div class="acts">'+(lock?
         '<button type="button" class="primary" data-pdf>PDF albarán '+esc(g.na)+'</button>'+
         (pgs(g).length?(g.cob?'':'<button type="button" class="btn" data-cob="efectivo">Cobrar lo que falta en efectivo</button><button type="button" class="btn" data-cob="tarjeta">Cobrar lo que falta con tarjeta</button>'):
@@ -660,6 +708,17 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
       if(imp>falta+0.004){toast('Solo faltan '+eur(falta)+' por cobrar');return}
       setG(n,g=>{if(g.cob&&!pgs(g).length)return;g.pg=pgs(g).concat({id:pgId(),f,imp,fp});if(imp>=falta-0.004){g.cob=f;g.fp=fp}});
       toast(imp>=falta-0.004?'Pago apuntado: albarán cobrado del todo':'Pago apuntado: faltan '+eur(falta-imp));re()}));
+    d.querySelectorAll('[data-gxa]').forEach(b=>b.addEventListener('click',()=>{
+      const imp=Math.round(num(d.querySelector('[data-gxi]').value)*100)/100,de=d.querySelector('[data-gxd]').value.trim(),t=d.querySelector('[data-gxt]').value,iva=d.querySelector('[data-gxv]').checked,fp=b.dataset.gxa;
+      if(!(imp>0)){toast('Pon el importe del gasto');d.querySelector('[data-gxi]').focus();return}
+      const x={id:pgId(),d:de,t,imp,iva,pag:null,fp:null};
+      if(fp){x.pag=iso(new Date());x.fp=fp;x.cid=gxCaja(r,x)}
+      setG(n,g=>{g.gx=gxs(g).concat(x)});if(!fp)toast('Gasto apuntado como pendiente: '+eur(imp));re()}));
+    d.querySelectorAll('[data-gxp]').forEach(b=>b.addEventListener('click',()=>{const x=gxs(r.g).find(y=>y.id===b.dataset.gxp);if(!x)return;
+      if(!confirm('¿Pagar '+eur(gxPay(x))+(b.dataset.fp==='efectivo'?' en efectivo':' por banco')+(x.d?' a '+x.d:'')+'?'))return;
+      const y=Object.assign({},x,{pag:iso(new Date()),fp:b.dataset.fp});y.cid=gxCaja(r,y);setG(n,g=>{g.gx=gxs(g).map(z=>z.id===x.id?y:z)});re()}));
+    d.querySelectorAll('[data-gxdel]').forEach(b=>b.addEventListener('click',()=>{const x=gxs(r.g).find(y=>y.id===b.dataset.gxdel);if(!x||!confirm('¿Borrar el gasto de '+eur(num(x.imp))+(x.pag?'? También se quita de la Caja.':'?')))return;
+      if(x.cid)setC(c=>{c.g=c.g.filter(z=>z.id!==x.cid)});setG(n,g=>{g.gx=gxs(g).filter(y=>y.id!==x.id)});re()}));
     d.querySelectorAll('[data-pgdel]').forEach(b=>b.addEventListener('click',()=>{const x=pgs(r.g).find(y=>y.id===b.dataset.pgdel);if(!x||!confirm('¿Borrar el pago de '+eur(num(x.imp))+' del '+dShort(x.f)+'?'))return;
       setG(n,g=>{g.pg=pgs(g).filter(y=>y.id!==x.id);g.cob=null;g.fp=null});re()}));
     const mo=d.querySelector('[data-mo]');if(mo)mo.addEventListener('change',()=>{setG(n,g=>{g.mo=String(mo.value).trim().replace(',','.')});re()});
@@ -672,13 +731,14 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
   const CK='lb-caja';
   const getC=()=>{const c=get(CK)||{};c.ini=c.ini||{b:0,e:0};c.g=Array.isArray(c.g)?c.g:[];return c};
   function setC(fn){const c=getC();fn(c);try{localStorage.setItem(CK,JSON.stringify(c))}catch(e){toast('No se pudo guardar');return false}return true}
-  const GT={rep:'Repuestos',tec:'Pago a técnico',otro:'Otro gasto'};
+  const GT={rep:'Repuestos',tec:'Pago a técnico',otro:'Otro gasto',sub:'Subcontrata',mat:'Materiales'};
   const cuenta=fp=>fp==='efectivo'?'e':'b';
   function addGasto(o){setC(c=>c.g.push(Object.assign({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),f:iso(new Date())},o)));toast('Gasto apuntado: '+eur(o.imp)+(o.fp==='efectivo'?' en efectivo':' por banco'));render()}
+  function gxCaja(r,x){const id=pgId();setC(c=>c.g.push({id,f:x.pag,t:x.t==='mat'?'mat':'sub',d:[(r.g.na||r.n),r.cl,x.d].filter(Boolean).join(' · '),imp:gxPay(x),fp:x.fp,alb:r.n}));toast('Gasto pagado: '+eur(gxPay(x))+(x.fp==='efectivo'?' en efectivo':' por banco'));return id}
   const pagado=(R,fn)=>getC().g.filter(x=>inR(x.f,R)&&fn(x)).reduce((s,x)=>s+num(x.imp),0);
   function payBtns(key,falta,txt){return falta>0.004?'<button type="button" class="btn" data-pay="'+key+'" data-fp="efectivo">Pagar '+eur(falta)+' en efectivo</button><button type="button" class="btn" data-pay="'+key+'" data-fp="banco">Pagar '+eur(falta)+' por banco</button>':'<span class="hint">'+txt+'</span>'}
   function caja(D,R,lbl){
-    const C=getC(),cm=[];D.av.filter(r=>r.b&&r.g.na).forEach(r=>cobMovs(r).forEach(m=>{m.r=r;cm.push(m)}));
+    const C=getC(),cm=[];D.av.filter(r=>r.b&&(r.g.na||pgs(r.g).length)).forEach(r=>cobMovs(r).forEach(m=>{m.r=r;cm.push(m)}));
     const ent={b:0,e:0},sal={b:0,e:0},sinFp=cm.filter(m=>!FP[m.fp]);
     cm.forEach(m=>{if(m.fp==='efectivo')ent.e+=m.imp;else if(m.fp==='tarjeta')ent.b+=m.imp});
     C.g.forEach(x=>sal[cuenta(x.fp)]+=num(x.imp));
@@ -876,6 +936,7 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
     return l.map(x=>'<div class="r"><div><b>'+eur(x.importe)+'</b> '+(x.firmado?'<span class="chip done">Firmado</span>':'<span class="chip pend">Esperando firma</span>')+'<small>'+esc((x.fp==='banco'?'Banco':'Efectivo')+' · '+dShort(String(x.creado).slice(0,10))+(x.firmado?' · firmó el '+dShort(String(x.firmado).slice(0,10)):''))+'</small></div></div>').join('')}
   function byTec(albP,lbl){
     $('p-sub').textContent=lbl;
+    albP=albP.filter(r=>r.tec||payBase(r)>0);
     // al técnico solo se le paga lo que el cliente ya ha pagado (albarán marcado como cobrado)
     const wait=new Map();albP.filter(r=>!r.g.cob).forEach(r=>{const k=r.tec||'Sin técnico',w=wait.get(k)||{n:0,p:0};w.n++;w.p+=payOf(r);wait.set(k,w)});
     const waitTxt=wait.size?'<p class="hint" style="margin-top:8px"><b>Esperando a que pague el cliente:</b> '+[...wait].map(([k,w])=>esc(k)+' '+eur(w.p)+' ('+w.n+' albarán'+(w.n===1?'':'es')+')').join(' · ')+'. Saldrá para pagar cuando marques el albarán como cobrado.</p>':'';
@@ -935,7 +996,7 @@ table.s-table{width:100%;border-collapse:collapse;font-size:12.5px}
     const qs=[['Cotización','Fecha','Estado','Cliente','Asunto','Base','IVA','Total']];
     D.qs.forEach(q=>qs.push([q.num,q.f,q.estado,q.cl,q.sub,r2(q.t.base),r2(q.t.tax),r2(q.t.total)]));
     const cj=[['Fecha','Tipo','Concepto','Cuenta','Entra (€)','Sale (€)']];
-    D.av.filter(r=>r.b&&r.g.na).forEach(r=>cobMovs(r).filter(m=>inR(m.f,R)).forEach(m=>cj.push([m.f,m.pc===1?'Pago a cuenta':'Cobro albarán',(r.g.na||r.n)+' · '+r.cl,m.fp==='efectivo'?'Efectivo':m.fp==='tarjeta'?'Banco':'Sin forma de pago',r2(m.imp),''])));
+    D.av.filter(r=>r.b&&(r.g.na||pgs(r.g).length)).forEach(r=>cobMovs(r).filter(m=>inR(m.f,R)).forEach(m=>cj.push([m.f,m.pc===1?'Pago a cuenta':'Cobro albarán',(r.g.na||r.n)+' · '+r.cl,m.fp==='efectivo'?'Efectivo':m.fp==='tarjeta'?'Banco':'Sin forma de pago',r2(m.imp),''])));
     getC().g.filter(x=>inR(x.f,R)).forEach(x=>cj.push([x.f,GT[x.t]||'Gasto',x.d||'',x.fp==='efectivo'?'Efectivo':'Banco','',r2(num(x.imp))]));
     cj.splice(1,cj.length-1,...cj.slice(1).sort((a,b)=>String(a[0]).localeCompare(String(b[0]))));
     const wb=XLSX.utils.book_new(),add=(rows,name,w)=>{const s=XLSX.utils.aoa_to_sheet(rows);s['!cols']=w.map(x=>({wch:x}));XLSX.utils.book_append_sheet(wb,s,name)};
