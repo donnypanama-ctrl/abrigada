@@ -363,9 +363,16 @@ function vDoc(){
     const t=tot(d),ps=d.pagos||[];
     $('pg').innerHTML=(ps.length?ps.map((p,i)=>'<div class="pay" data-i="'+i+'"><div class="t"><b>'+eur(num(p.imp))+'</b> <small>'+esc(p.fp)+' · '+esc(fmtD(p.f))+(p.rec?' · '+esc(p.rec):'')+'</small></div>'+
       '<button class="btn l s" data-a="rec">Recibo</button><button class="btn x" data-a="del" style="padding:8px">×</button></div>').join(''):'<div class="hint">Todavía no has cobrado nada.</div>')+
-      '<div class="tots"><div><span>Cobrado</span><span>'+eur(t.pag)+'</span></div><div><b>Falta por cobrar</b><b>'+eur(Math.max(0,t.falta))+'</b></div></div>';
+      '<div class="tots"><div><span>Cobrado</span><span>'+eur(t.pag)+'</span></div><div><b>Falta por cobrar</b><b>'+eur(Math.max(0,t.falta))+'</b></div></div>'+
+      (cobra(d)&&t.falta>0.005?'<button class="btn l s" id="rem" style="margin-top:10px;width:100%">💬 Recordar el cobro por WhatsApp</button>':'');
+    if($('rem'))$('rem').onclick=()=>{
+      if(!(d.cl.tel||'').trim()){toast('Pon el teléfono del cliente en sus datos');return}
+      const t2=tot(d),doc=(d.fac?'la factura '+d.fac.num:'el '+NAME[d.t].toLowerCase()+' '+d.num);
+      const txt='Hola'+(d.cl.n?' '+d.cl.n:'')+', ¿qué tal? Te escribo de La Brigada para recordarte '+doc+(d.asunto?' ('+d.asunto+')':'')+' del '+fmtD(d.f)+'. Queda pendiente '+eur(t2.falta)+'.'+(S.cfg.iban?' Puedes hacer transferencia al IBAN '+S.cfg.iban+'.':'')+' Cualquier cosa me dices. ¡Gracias!';
+      window.open(waLink(d.cl.tel,txt),'_blank');d.rec=today();d.u=now();persist();
+    };
   };
-  $('pg').onclick=e=>{const b=e.target.closest('button');if(!b)return;const i=+b.closest('.pay').dataset.i;
+  $('pg').onclick=e=>{const b=e.target.closest('button');if(!b||!b.closest('.pay'))return;const i=+b.closest('.pay').dataset.i;
     if(b.dataset.a==='del'){if(confirm('¿Quitar este cobro?')){d.pagos.splice(i,1);drawPays();save();if(d.t==='A')vDoc()}}
     else pdfRecibo(d,d.pagos[i],b)};
   const addPay=imp=>{if(!(imp>0)){toast('Pon el importe cobrado');return}
