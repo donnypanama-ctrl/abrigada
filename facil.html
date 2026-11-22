@@ -296,6 +296,7 @@ function vDoc(){
     '<div class="bar"><h1>'+NAME[d.t]+'</h1><span class="num">'+esc(d.num)+'</span></div>'+
     '<div class="card"><label class="f"><span>Cliente</span><input class="i" id="cn" list="dl" placeholder="Escribe o elige un cliente" value="'+esc(d.cl.n)+'"></label>'+
     '<datalist id="dl">'+clis().map(c=>'<option value="'+esc(c.n)+'">').join('')+'</datalist>'+
+    '<datalist id="prev">'+[...precios().values()].map(o=>'<option value="'+esc(o.d)+'">'+esc(eur(num(o.p)))+'</option>').join('')+'</datalist>'+
     '<details class="more" id="cdet"'+(d.cl.n&&!d.cl.dir&&!d.cl.cif?' open':'')+'><summary>Datos del cliente (CIF, dirección, teléfono, email)</summary>'+
     '<div class="row2"><label class="f"><span>CIF / NIF</span><input class="i" data-c="cif" value="'+esc(d.cl.cif)+'"></label><label class="f"><span>Teléfono</span><input class="i" data-c="tel" inputmode="tel" value="'+esc(d.cl.tel)+'"></label></div>'+
     '<label class="f"><span>Dirección</span><textarea class="i" data-c="dir" rows="2">'+esc(d.cl.dir)+'</textarea></label>'+
@@ -334,13 +335,14 @@ function vDoc(){
   const drawLines=()=>{
     $('ln').innerHTML=(d.l||[]).map((x,i)=>'<div class="line" data-i="'+i+'"><div class="kind"><button data-k="R" class="'+(x.k==='R'?'on':'')+'">Repuesto</button><button data-k="M" class="'+(x.k!=='R'?'on':'')+'">Mano de obra</button></div>'+
       '<button class="del" title="Quitar">×</button>'+
-      '<input class="i" data-x="d" placeholder="'+(x.k==='R'?'Ej.: Compresor 1/2 CV':'Ej.: Instalación y revisión')+'" value="'+esc(x.d)+'" style="margin-bottom:8px">'+
+      '<input class="i" data-x="d" placeholder="'+(x.k==='R'?'Ej.: Compresor 1/2 CV':'Ej.: Instalación y revisión')+'" value="'+esc(x.d)+'" list="prev" autocomplete="off" style="margin-bottom:8px">'+
       '<div class="g3"><label class="f" style="margin:0"><span>Cant.</span><input class="i" data-x="q" inputmode="decimal" value="'+esc(x.q)+'"></label>'+
       '<label class="f" style="margin:0"><span>Precio €</span><input class="i" data-x="p" inputmode="decimal" placeholder="0,00" value="'+esc(x.p)+'"></label>'+
       '<div class="imp" data-imp>'+eur(num(x.q)*num(x.p))+'</div></div></div>').join('')||'<div class="hint" style="margin-bottom:8px">Añade al menos una línea.</div>';
   };
   const drawTot=()=>{const t=tot(d);$('tt').innerHTML='<div><span>Base</span><span>'+eur(t.base)+'</span></div><div><span>IVA 21 %</span><span>'+(d.siva?'Sin IVA':eur(t.iva))+'</span></div><div class="T"><span>TOTAL</span><span>'+eur(t.total)+'</span></div>'};
   $('ln').oninput=e=>{const el=e.target,ln=el.closest('.line');if(!ln||!el.dataset.x)return;const x=d.l[+ln.dataset.i];x[el.dataset.x]=el.value;
+    if(el.dataset.x==='d'&&!num(x.p)){const o=precios().get(el.value.trim().toLowerCase());if(o){x.p=o.p;x.k=o.k;const pi=ln.querySelector('[data-x="p"]');pi.value=o.p;ln.querySelectorAll('.kind button').forEach(b=>b.classList.toggle('on',b.dataset.k===o.k));toast('Precio de la última vez: '+eur(num(o.p)))}}
     ln.querySelector('[data-imp]').textContent=eur(num(x.q)*num(x.p));drawTot();drawPays();save()};
   $('ln').onclick=e=>{const ln=e.target.closest('.line');if(!ln)return;const i=+ln.dataset.i;
     if(e.target.classList.contains('del')){d.l.splice(i,1);drawLines();drawTot();drawPays();save()}
@@ -416,6 +418,8 @@ function drawFac(d){
     };
   }
 }
+// Último precio usado de cada repuesto o trabajo (por nombre)
+function precios(){const m=new Map();docs().slice().sort((a,b)=>(a.f||'').localeCompare(b.f||'')).forEach(d=>(d.l||[]).forEach(x=>{const k=(x.d||'').trim().toLowerCase();if(k&&num(x.p))m.set(k,{d:x.d.trim(),p:String(x.p),k:x.k||'M'})}));return m}
 function rememberCli(cl){
   const n=(cl.n||'').trim();if(!n)return;
   let c=S.cli.find(c=>!c.del&&c.n.toLowerCase()===n.toLowerCase());
@@ -511,7 +515,7 @@ function vCuentas(){
     '</table><div class="hint" style="margin-top:8px">Entra = cobros apuntados en albaranes y presupuestos. Sale = gastos.</div></div>'+
     '<h2 class="sec">Gastos del periodo</h2><div class="list" id="lg">'+(gs.map(g=>{const t=gt(g);
       return '<div class="item" data-id="'+g.id+'"><div class="ic G'+g.k+'">'+(g.k==='S'?'SAT':g.k==='T'?'TÉC':'€')+'</div><div class="t"><b>'+esc(g.d||GK[g.k])+'</b><small>'+esc(GK[g.k])+' · '+esc(fmtD(g.f))+' · '+esc(g.fp||'')+'</small></div>'+
-      '<div class="r"><b>'+eur(t.tot)+'</b><br><small class="hint">IVA '+(num(g.iva)?eur(t.iva):'no')+'</small></div></div>'}).join('')||'<div class="empty">No hay gastos en este periodo.</div>')+'</div>';
+      '<div class="r"><b>'+(g.foto?'📷 ':'')+eur(t.tot)+'</b><br><small class="hint">IVA '+(num(g.iva)?eur(t.iva):'no')+'</small></div></div>'}).join('')||'<div class="empty">No hay gastos en este periodo.</div>')+'</div>';
   $('pm').onclick=e=>{const b=e.target.closest('button');if(!b)return;per={m:b.dataset.m,off:0};vCuentas()};
   $('xl').onclick=()=>excelGestoria(R);
   $('pv').onclick=()=>{per.off--;vCuentas()};$('nx').onclick=()=>{if(per.off<0){per.off++;vCuentas()}};
@@ -559,6 +563,8 @@ function vGasto(){
     '<div class="row2"><label class="f"><span>Fecha</span><input class="i" type="date" id="gf" value="'+esc(g.f)+'"></label>'+
     '<label class="f"><span>Pagado con</span><select class="i" id="gfp">'+FP.map(f=>'<option'+(g.fp===f?' selected':'')+'>'+f+'</option>').join('')+'</select></label></div>'+
     '<div class="tots" id="gt"></div></div>'+
+    '<div class="card"><div class="hint" style="margin-bottom:8px">Foto de la factura o del ticket</div><div id="gph"></div>'+
+    '<label class="btn l s" style="display:inline-block;margin-top:8px">📷 '+(g.foto?'Cambiar foto':'Hacer o elegir foto')+'<input type="file" accept="image/*" id="gfile" style="display:none"></label></div>'+
     '<button class="btn o" id="gok" style="width:100%">Guardar</button><button class="btn x" id="gdel" style="margin-top:10px">Borrar gasto</button>';
   const save=()=>{g.u=now();delete g.nuevo;persist()};
   $('gk').onclick=e=>{const b=e.target.closest('button');if(!b)return;g.k=b.dataset.k;if(g.k==='T'&&!num(g.tot))g.iva=0;if(g.k!=='T'&&!num(g.tot)&&!num(g.iva))g.iva=21;save();vGasto()};
@@ -570,9 +576,18 @@ function vGasto(){
   const leave=()=>{if(g.nuevo&&!num(g.tot)&&!g.d){S.gas.splice(S.gas.indexOf(g),1);saveLocal()}go('cuentas')};
   $('bk').onclick=leave;
   $('gok').onclick=()=>{if(!(num(g.tot)>0)){toast('Pon el importe');return}save();toast('Gasto guardado');go('cuentas')};
+  const drawPh=async()=>{const el=$('gph');if(!g.foto){el.innerHTML='<span class="hint">Sin foto.</span>';return}
+    el.innerHTML='<span class="hint">Cargando foto…</span>';const u=await cloud.fotoUrl(g.foto);
+    el.innerHTML=u?'<a href="'+esc(u)+'" target="_blank"><img src="'+esc(u)+'" alt="Ticket" style="max-width:100%;max-height:260px;border-radius:10px;border:1px solid var(--line)"></a>':'<span class="hint">La foto está guardada en la nube. Entra con tu usuario en Ajustes para verla.</span>'};
+  $('gfile').onchange=async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;
+    if(!cloud.on()){toast('Para guardar fotos entra con tu usuario en Ajustes → Nube');return}
+    toast('Subiendo foto…');try{const blob=await shrink(f);const path='gastos/'+g.id+'-'+now().toString(36)+'.jpg';await cloud.subirFoto(path,blob);g.foto=path;save();vGasto();toast('Foto guardada')}catch(err){toast('No se pudo subir la foto')}};
+  drawPh();
   $('gdel').onclick=()=>{if(g.nuevo){leave();return}if(confirm('¿Borrar este gasto?')){Object.keys(g).forEach(k=>{if(k!=='id')delete g[k]});g.del=1;g.u=now();persist();go('cuentas')}};
   draw();
 }
+
+function shrink(file){return new Promise((ok,ko)=>{const im=new Image();im.onload=()=>{const m=1600,k=Math.min(1,m/Math.max(im.width,im.height));const c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(im.src);c.toBlob(b=>b?ok(b):ko(new Error('foto')),'image/jpeg',0.82)};im.onerror=ko;im.src=URL.createObjectURL(file)})}
 
 // ---------- Ajustes ----------
 function vAjustes(){
@@ -757,7 +772,9 @@ const cloud=(function(){
   }
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')pull()});
   setInterval(()=>{if(document.visibilityState==='visible')pull()},60000);
-  return{push,pull,start,panel};
+  async function subirFoto(path,blob){const{error}=await sb.storage.from('fotos').upload(path,blob,{contentType:'image/jpeg',upsert:true});if(error)throw error}
+  async function fotoUrl(path){if(!sb||!user)return null;try{const{data,error}=await sb.storage.from('fotos').createSignedUrl(path,3600);return error?null:data.signedUrl}catch(e){return null}}
+  return{push,pull,start,panel,subirFoto,fotoUrl,on:()=>!!(sb&&user)};
 })();
 
 // ================= Arreglos de una vez (22/11/2026, pedidos por Donny) =================
