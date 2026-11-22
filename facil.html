@@ -674,6 +674,28 @@ const cloud=(function(){
   return{push,pull,start,panel};
 })();
 
+// ================= Arreglos de una vez (22/11/2026, pedidos por Donny) =================
+// 1) Quitar los documentos traídos de la app de antes que sigan pendientes, menos Café Sport.
+// 2) Añadir el albarán del cristal de Alfredo Pasta (del presupuesto del escaparate, 2.750 € + IVA).
+// Todo con u=2: cualquier cambio hecho a mano en un aparato (u = hora real) manda sobre esto.
+(function(){
+  let ch=false;
+  S.docs.forEach(d=>{
+    if(!d.del&&/^imp-/.test(d.id)&&d.id!=='imp-alb-cristal'&&(d.u||0)<=2&&d.cl&&!/caf[eé] sport/i.test(d.cl.n||'')&&estado(d)==='pendiente'){
+      Object.keys(d).forEach(k=>{if(!['id','t','num'].includes(k))delete d[k]});d.del=1;d.u=2;ch=true}
+  });
+  if(!S.docs.some(d=>d.id==='imp-alb-cristal')){
+    S.docs.push({id:'imp-alb-cristal',u:2,t:'A',num:nextNum('A'),f:today(),
+      cl:{n:'Alfredo Pasta SL',cif:'',dir:'Plaza de Cascorro 21\nLa Latina, Madrid',tel:'',mail:''},
+      asunto:'Escaparate, puerta y divisiones de aluminio con cristal de seguridad',
+      desc:'1 escaparate fijo con 1 puerta batiente.\n2 divisiones fijas en el interior del local.\nEstructura de aluminio en color RAL 7022 (gris oscuro).\nCristal de seguridad laminar 5+5 transparente en escaparate, puerta y divisiones interiores.\nPuerta con cerradura de llave y freno muelle.\nMontaje, nivelación, fijación, acabado y sellado. Transporte y retirada de residuos.',
+      l:[{k:'M',d:'Suministro e instalación de escaparate fijo, puerta batiente y 2 divisiones interiores en aluminio RAL 7022 con cristal laminar 5+5, cerradura y freno muelle',q:1,p:'2750'}],
+      siva:false,pago:'Transferencia o Bizum.',cond:'',est:'pendiente',pagos:[]});
+    ch=true;
+  }
+  if(ch)saveLocal();
+})();
+
 // ================= Arranque =================
 const h=(location.hash||'').slice(1);if(['docs','clientes','ajustes','cuentas'].includes(h))view=h;
 render();cloud.start();
