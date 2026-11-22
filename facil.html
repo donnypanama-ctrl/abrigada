@@ -167,6 +167,7 @@ details.more summary{color:var(--steel);cursor:pointer;padding:6px 0;font-size:1
 <script src="supabase.js"></script>
 <script src="html2canvas.min.js"></script>
 <script src="jspdf.umd.min.js"></script>
+<script src="xlsx.mini.min.js"></script>
 <script>
 (function(){
 'use strict';
@@ -215,11 +216,11 @@ const fmtD=s=>{if(!s)return'';const[y,m,d]=s.split('-');return d+'/'+m+'/'+y};
 const addDays=(s,n)=>{const d=new Date(s+'T12:00:00');d.setDate(d.getDate()+n);return d.toISOString().slice(0,10)};
 const lines=s=>String(s||'').split('\n').map(x=>x.trim()).filter(Boolean);
 function toast(t){const e=$('toast');e.textContent=t;e.classList.add('on');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('on'),2600)}
-const PFX={P:'LB',A:'ALB',R:'REC'};
+const PFX={P:'LB',A:'ALB',R:'REC',F:'F'};
 const NAME={P:'Presupuesto',A:'Albarán'};
 function nextNum(t){
   const y=new Date().getFullYear(),p=PFX[t]+'-'+y+'-';let max=(S.cfg.ini&&S.cfg.ini[t]||1)-1;
-  const all=t==='R'?docs().flatMap(d=>(d.pagos||[]).map(x=>x.rec||'')):docs().filter(d=>d.t===t).map(d=>d.num);
+  const all=t==='F'?docs().map(d=>d.fac&&d.fac.num||''):t==='R'?docs().flatMap(d=>(d.pagos||[]).map(x=>x.rec||'')):docs().filter(d=>d.t===t).map(d=>d.num);
   all.forEach(n=>{if(n&&n.startsWith(p)){const k=parseInt(n.slice(p.length),10);if(k>max)max=k}});
   return p+String(max+1).padStart(3,'0');
 }
@@ -277,7 +278,7 @@ function fillList(){
 function itemHtml(d){
   const t=tot(d);
   return '<div class="item" data-id="'+d.id+'"><div class="ic '+d.t+'">'+(d.t==='P'?'P':'A')+'</div>'+
-    '<div class="t"><b>'+esc(d.cl&&d.cl.n||'Sin cliente')+'</b><small>'+esc(d.num)+' · '+esc(fmtD(d.f))+(d.asunto?' · '+esc(d.asunto):'')+'</small></div>'+
+    '<div class="t"><b>'+esc(d.cl&&d.cl.n||'Sin cliente')+'</b><small>'+esc(d.num)+(d.fac?' · Factura '+esc(d.fac.num):'')+' · '+esc(fmtD(d.f))+(d.asunto?' · '+esc(d.asunto):'')+'</small></div>'+
     '<div class="r"><b>'+eur(t.total)+'</b><br>'+badge(estado(d))+'</div></div>';
 }
 function newDoc(t,cl){
@@ -310,6 +311,7 @@ function vDoc(){
       (d.pasado?'':'<button class="btn o" id="toA" style="width:100%;margin-top:12px">Pasar a albarán</button>')+'</div>':
      '<h2 class="sec">Estado del albarán</h2><div class="card"><div class="est" id="esA">'+['pendiente','enviado','aceptado'].map(e=>'<button data-e="'+e+'" class="'+((d.est||'pendiente')===e?'on':'')+'">'+ESTXT[e]+'</button>').join('')+'</div>'+
      '<div class="hint" style="margin-top:8px">Cuando te paguen, apúntalo abajo en Cobros y se pone en <b>Pagado</b> solo.</div></div>')+
+    (isP?'':'<h2 class="sec">Factura</h2><div class="card" id="fc"></div>')+
     '<h2 class="sec">Cobros</h2><div class="card"><div id="pg"></div>'+
     '<div class="row2" style="margin-top:10px"><label class="f"><span>Importe cobrado</span><input class="i" id="pi" inputmode="decimal" placeholder="0,00"></label>'+
     '<label class="f"><span>Forma</span><select class="i" id="pf"><option>Transferencia</option><option>Bizum</option><option>Efectivo</option><option>Tarjeta</option></select></label></div>'+
@@ -379,12 +381,33 @@ function vDoc(){
     Object.keys(d).forEach(k=>{if(!['id','t','num'].includes(k))delete d[k]});d.del=1;d.u=now();
     S.docs.filter(x=>x.pasado===d.num).forEach(x=>{delete x.pasado;x.u=now()});persist();go('docs')};
   drawLines();drawTot();drawPays();
+  if(!isP)drawFac(d);
   // barra de envío
   $('sendbar').classList.remove('hide');
   $('sendin').innerHTML='<button class="btn o" id="sPdf">Enviar al cliente</button>'+(d.cl.tel?'<button class="btn" id="sWa" style="flex:.6">WhatsApp</button>':'')+'<button class="btn l" id="sDl" style="flex:.5">PDF</button>';
   $('sPdf').onclick=e=>sendDoc(d,e.target,'share');
   $('sDl').onclick=e=>sendDoc(d,e.target,'download');
   if($('sWa'))$('sWa').onclick=e=>sendDoc(d,e.target,'wa');
+}
+function drawFac(d){
+  const el=$('fc');if(!el)return;
+  if(d.fac){
+    el.innerHTML='<div><b>Factura '+esc(d.fac.num)+'</b> <span class="hint">del '+esc(fmtD(d.fac.f))+'</span></div>'+
+      '<div class="adds" style="margin-top:10px"><button class="btn o s" id="fS">Enviar factura</button><button class="btn l s" id="fD">PDF factura</button></div>'+
+      '<div class="hint" style="margin-top:8px">La factura lleva lo mismo que este albarán. Si cambias algo aquí, cambia también en la factura.</div>'+
+      '<button class="btn x" id="fX" style="margin-top:6px">Anular factura</button>';
+    $('fS').onclick=e=>sendFac(d,e.target,'share');$('fD').onclick=e=>sendFac(d,e.target,'download');
+    $('fX').onclick=()=>{if(!confirm('¿Anular la factura '+d.fac.num+'? Si ya la mandaste a la gestoría, mejor no.'))return;delete d.fac;d.u=now();persist();drawFac(d)};
+  }else{
+    el.innerHTML='<div class="hint">Para Hacienda y la gestoría hace falta factura, no basta el albarán.</div><button class="btn o" id="fM" style="width:100%;margin-top:10px">Hacer factura</button>';
+    $('fM').onclick=()=>{
+      if(!(S.cfg.cif||'').trim()||!(S.cfg.dir||'').trim()){toast('Primero pon el CIF y la dirección de tu empresa en Ajustes');return}
+      if(!(d.cl.n||'').trim()){toast('Pon el nombre del cliente');return}
+      if(!(d.cl.cif||'').trim()&&!confirm('El cliente no tiene CIF/NIF. Para empresas es obligatorio. ¿Hacer la factura igualmente?'))return;
+      if(!(tot(d).total>0)){toast('El albarán está a 0 €');return}
+      d.fac={num:nextNum('F'),f:today()};d.u=now();persist();rememberCli(d.cl);drawFac(d);toast('Factura '+d.fac.num+' hecha');
+    };
+  }
 }
 function rememberCli(cl){
   const n=(cl.n||'').trim();if(!n)return;
@@ -463,7 +486,7 @@ function vCuentas(){
   const cash=mov.Efectivo,bank={in:0,out:0};Object.keys(mov).filter(f=>f!=='Efectivo').forEach(f=>{bank.in+=mov[f].in;bank.out+=mov[f].out});
   const row=(l,a,b,c,bold)=>'<tr'+(bold?' style="font-weight:700"':'')+'><td>'+l+'</td><td class="rr">'+a+'</td><td class="rr">'+b+'</td><td class="rr">'+c+'</td></tr>';
   $('main').innerHTML=
-    '<div class="bar"><h1>Cuentas</h1><button class="btn o s" id="nG">+ Apuntar gasto</button></div>'+
+    '<div class="bar"><h1>Cuentas</h1><button class="btn l s" id="xl">Excel gestoría</button><button class="btn o s" id="nG">+ Gasto</button></div>'+
     '<div class="chips" id="pm">'+[['mes','Mes'],['tri','Trimestre'],['año','Año']].map(x=>'<button data-m="'+x[0]+'" class="'+(per.m===x[0]?'on':'')+'">'+x[1]+'</button>').join('')+'</div>'+
     '<div class="pnav"><button class="btn l s" id="pv">‹</button><b>'+esc(R.label)+'</b><button class="btn l s" id="nx"'+(per.off>=0?' disabled':'')+'>›</button></div>'+
     '<div class="kpi"><div><small>Trabajos (albaranes y aceptados)</small><b>'+eur(fact.total)+'</b><em>'+eur(fact.base)+' + IVA</em></div>'+
@@ -483,9 +506,40 @@ function vCuentas(){
       return '<div class="item" data-id="'+g.id+'"><div class="ic G'+g.k+'">'+(g.k==='S'?'SAT':g.k==='T'?'TÉC':'€')+'</div><div class="t"><b>'+esc(g.d||GK[g.k])+'</b><small>'+esc(GK[g.k])+' · '+esc(fmtD(g.f))+' · '+esc(g.fp||'')+'</small></div>'+
       '<div class="r"><b>'+eur(t.tot)+'</b><br><small class="hint">IVA '+(num(g.iva)?eur(t.iva):'no')+'</small></div></div>'}).join('')||'<div class="empty">No hay gastos en este periodo.</div>')+'</div>';
   $('pm').onclick=e=>{const b=e.target.closest('button');if(!b)return;per={m:b.dataset.m,off:0};vCuentas()};
+  $('xl').onclick=()=>excelGestoria(R);
   $('pv').onclick=()=>{per.off--;vCuentas()};$('nx').onclick=()=>{if(per.off<0){per.off++;vCuentas()}};
   $('nG').onclick=()=>{const g={id:uid(),u:now(),k:'S',d:'',f:today(),tot:'',iva:21,fp:'Tarjeta',nuevo:1};S.gas.push(g);go('gasto',g.id)};
   $('lg').onclick=e=>{const it=e.target.closest('.item');if(it)go('gasto',it.dataset.id)};
+}
+function excelGestoria(R){
+  if(!window.XLSX){toast('No cargó el Excel. Recarga la página.');return}
+  const inR=f=>f&&f>=R.a&&f<R.b,n2=x=>r2(x);
+  const fac=docs().filter(d=>d.t==='A'&&d.fac&&inR(d.fac.f)).sort((a,b)=>a.fac.num.localeCompare(b.fac.num));
+  const ventas=fac.map(d=>{const t=tot(d);return{'Fecha':fmtD(d.fac.f),'N.º factura':d.fac.num,'Albarán':d.num,'Cliente':d.cl.n,'CIF/NIF cliente':d.cl.cif||'','Concepto':d.asunto||'','Base €':n2(t.base),'IVA %':d.siva?0:21,'IVA €':n2(t.iva),'Total €':n2(t.total),'Cobrado €':n2(t.pag),'Pendiente €':n2(Math.max(0,t.falta))}});
+  const sinFac=docs().filter(d=>d.t==='A'&&!d.fac&&inR(d.f)).map(d=>{const t=tot(d);return{'Fecha':fmtD(d.f),'Albarán':d.num,'Cliente':d.cl.n,'Concepto':d.asunto||'','Base €':n2(t.base),'IVA €':n2(t.iva),'Total €':n2(t.total)}});
+  const gs=gastos().filter(g=>inR(g.f)).sort((a,b)=>(a.f||'').localeCompare(b.f||''));
+  const grow=g=>{const t=gt(g);return{'Fecha':fmtD(g.f),'Tipo':GK[g.k],'Concepto / n.º factura':g.d||'','Base €':n2(t.base),'IVA %':num(g.iva),'IVA €':n2(t.iva),'Total €':n2(t.tot),'Pagado con':g.fp||''}};
+  const sat=gs.filter(g=>g.k==='S').map(grow),otros=gs.filter(g=>g.k!=='S').map(grow);
+  const sum=(a,k)=>n2(a.reduce((s,x)=>s+(x[k]||0),0));
+  const rep=sum(ventas,'IVA €'),sop=n2(sum(sat,'IVA €')+sum(otros,'IVA €'));
+  const res=[{'Concepto':'Periodo','Importe':R.label},
+    {'Concepto':'Ventas facturadas (base)','Importe':sum(ventas,'Base €')},{'Concepto':'IVA repercutido (de tus facturas)','Importe':rep},
+    {'Concepto':'Compras de repuestos a SAT La Latina (base)','Importe':sum(sat,'Base €')},{'Concepto':'IVA soportado SAT La Latina','Importe':sum(sat,'IVA €')},
+    {'Concepto':'Otros gastos y técnicos (base)','Importe':sum(otros,'Base €')},{'Concepto':'IVA soportado otros gastos','Importe':sum(otros,'IVA €')},
+    {'Concepto':rep-sop>=0?'IVA a ingresar':'IVA a compensar','Importe':n2(Math.abs(rep-sop))},
+    {'Concepto':'Albaranes de este periodo sin factura','Importe':sinFac.length}];
+  const wb=XLSX.utils.book_new(),add=(rows,name,empty)=>{const ws=XLSX.utils.json_to_sheet(rows.length?rows:[empty]);ws['!cols']=Object.keys(rows[0]||empty).map(k=>({wch:Math.max(10,k.length+2,...rows.map(r=>String(r[k]==null?'':r[k]).length+1).slice(0,200))}));XLSX.utils.book_append_sheet(wb,ws,name)};
+  add(res,'Resumen',{});
+  add(ventas,'Facturas emitidas',{'Fecha':'Sin facturas en este periodo'});
+  add(sat,'Compras SAT La Latina',{'Fecha':'Sin compras en este periodo'});
+  add(otros,'Otros gastos',{'Fecha':'Sin gastos en este periodo'});
+  if(sinFac.length)add(sinFac,'Albaranes sin factura',{});
+  const out=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  const name='La_Brigada_'+safe(R.label)+'.xlsx';
+  const blob=new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const file=new File([blob],name,{type:blob.type});
+  if(mobile&&navigator.canShare&&navigator.canShare({files:[file]})){navigator.share({files:[file],title:name}).catch(()=>{});return}
+  download(blob,name);toast('Excel descargado');
 }
 function vGasto(){
   const g=S.gas.find(x=>x.id===cur);if(!g||g.del){go('cuentas');return}
@@ -518,7 +572,7 @@ function vAjustes(){
   const c=S.cfg;
   $('main').innerHTML='<div class="bar"><h1>Ajustes</h1></div>'+
     '<h2 class="sec">Nube</h2><div class="card" id="nb"></div>'+
-    '<h2 class="sec">Tus datos (salen en el PDF)</h2><div class="card">'+
+    '<h2 class="sec">Tus datos (salen en el PDF)</h2><div class="card">'+((c.cif||'').trim()&&(c.dir||'').trim()?'':'<div class="hint" style="color:var(--bad);margin-bottom:8px">Para hacer facturas hace falta el CIF y la dirección fiscal.</div>')+
     '<div class="row2"><label class="f"><span>Empresa</span><input class="i" data-k="empresa" value="'+esc(c.empresa)+'"></label><label class="f"><span>CIF</span><input class="i" data-k="cif" value="'+esc(c.cif)+'"></label></div>'+
     '<div class="row2"><label class="f"><span>Teléfono / WhatsApp</span><input class="i" data-k="tel" value="'+esc(c.tel)+'"></label><label class="f"><span>Email</span><input class="i" data-k="mail" value="'+esc(c.mail)+'"></label></div>'+
     '<div class="row2"><label class="f"><span>Instagram</span><input class="i" data-k="insta" value="'+esc(c.insta)+'"></label><label class="f"><span>Ciudad</span><input class="i" data-k="ciudad" value="'+esc(c.ciudad)+'"></label></div>'+
@@ -567,6 +621,24 @@ function docHtml(d){
     (pago.length?sec('Forma de pago',ul(pago)):'')+
     (isP&&lines(d.cond).length?sec('Condiciones del presupuesto',ul(lines(d.cond).concat(['Validez del presupuesto: '+(S.cfg.validez||15)+' días desde su emisión.']))):'')+
     '<div class="sig"><div>Por La Brigada</div><div>Conforme cliente · firma y fecha</div></div>'+foot()+'</div>';
+}
+function facturaHtml(d){
+  const t=tot(d),c=S.cfg;
+  const rows=(d.l||[]).filter(x=>x.d||num(x.p)).map((x,i)=>'<tr class="'+(i%2?'':'z')+'"><td>'+String(i+1).padStart(2,'0')+'</td><td>'+(x.k==='R'?'Repuesto: ':'')+esc(x.d)+'</td><td class="r">'+esc(String(x.q).replace('.',','))+'</td><td class="r">'+eur(num(x.p))+'</td><td class="r">'+eur(num(x.q)*num(x.p))+'</td></tr>').join('');
+  const pago=lines(d.pago);if(c.iban)pago.push('IBAN: '+c.iban);
+  return '<div class="pg">'+head()+
+    '<div class="band"><div><h1>FACTURA</h1><div class="s">'+esc(d.asunto||'')+'</div></div><div class="meta"><span class="k">N.º</span><span>'+esc(d.fac.num)+'</span><span class="k">FECHA</span><span>'+fmtD(d.fac.f)+'</span><span class="k">ALBARÁN</span><span>'+esc(d.num)+'</span></div></div>'+
+    '<div class="two"><div><div class="lb">EMISOR</div><b style="font-weight:600">'+esc(c.empresa)+'</b><br>CIF '+esc(c.cif)+'<br>'+esc(c.dir).replace(/\n/g,'<br>')+(c.ciudad&&!c.dir.includes(c.ciudad)?'<br>'+esc(c.ciudad):'')+'</div>'+
+    '<div><div class="lb">FACTURAR A</div>'+cliBlock(d.cl)+'</div></div>'+
+    '<h2>Detalle</h2><table><tr><th style="width:30px">#</th><th>Concepto</th><th class="r">Cant.</th><th class="r">Precio ud.</th><th class="r">Importe</th></tr>'+(rows||'<tr><td colspan="5">—</td></tr>')+'</table>'+
+    '<div class="tot"><div><span>Base imponible</span><span>'+eur(t.base)+'</span></div><div><span>'+(d.siva?'IVA':'IVA 21 %')+'</span><span>'+(d.siva?'0,00 €':eur(t.iva))+'</span></div><div class="T"><span>TOTAL</span><span>'+eur(t.total)+'</span></div>'+
+    (t.pag>0?'<div><span>Pagado</span><span>'+eur(t.pag)+'</span></div><div><b>'+(t.falta>0.005?'Pendiente':'Pagada')+'</b><b>'+eur(Math.max(0,t.falta))+'</b></div>':'')+'</div>'+
+    (pago.length?'<h2>Forma de pago</h2><ul>'+pago.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>':'')+
+    foot()+'</div>';
+}
+function sendFac(d,btn,mode){
+  busy(btn,async()=>{const blob=await makePdf(facturaHtml(d));
+    await deliver(blob,'Factura_'+d.fac.num+'_'+safe(d.cl.n)+'.pdf','Hola'+(d.cl.n?' '+d.cl.n:'')+', te mando la factura '+d.fac.num+' por '+eur(tot(d).total)+'. Gracias. La Brigada',mode,d)});
 }
 function reciboHtml(d,p){
   const t=tot(d);const idx=d.pagos.indexOf(p);const antes=r2(d.pagos.slice(0,idx+1).reduce((s,x)=>s+num(x.imp),0));const falta=r2(t.total-antes);
