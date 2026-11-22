@@ -448,7 +448,8 @@ function perRange(){
 }
 function vCuentas(){
   const R=perRange(),inR=f=>f&&f>=R.a&&f<R.b;
-  const albs=docs().filter(d=>d.t==='A'&&inR(d.f));
+  const albs=docs().filter(d=>cobra(d)&&inR(d.f));
+  const fcob=albs.reduce((s,d)=>s+tot(d).pag,0),fdebe=albs.reduce((s,d)=>s+Math.max(0,tot(d).falta),0);
   const fact=albs.reduce((s,d)=>{const t=tot(d);s.base+=t.base;s.iva+=t.iva;s.total+=t.total;return s},{base:0,iva:0,total:0});
   const gs=gastos().filter(g=>inR(g.f)).sort((a,b)=>(b.f||'').localeCompare(a.f||''));
   const byK={S:{base:0,iva:0,tot:0,n:0},T:{base:0,iva:0,tot:0,n:0},O:{base:0,iva:0,tot:0,n:0}};
@@ -465,10 +466,11 @@ function vCuentas(){
     '<div class="bar"><h1>Cuentas</h1><button class="btn o s" id="nG">+ Apuntar gasto</button></div>'+
     '<div class="chips" id="pm">'+[['mes','Mes'],['tri','Trimestre'],['año','Año']].map(x=>'<button data-m="'+x[0]+'" class="'+(per.m===x[0]?'on':'')+'">'+x[1]+'</button>').join('')+'</div>'+
     '<div class="pnav"><button class="btn l s" id="pv">‹</button><b>'+esc(R.label)+'</b><button class="btn l s" id="nx"'+(per.off>=0?' disabled':'')+'>›</button></div>'+
-    '<div class="kpi"><div><small>Facturado (albaranes)</small><b>'+eur(fact.total)+'</b><em>'+eur(fact.base)+' + IVA</em></div>'+
+    '<div class="kpi"><div><small>Trabajos (albaranes y aceptados)</small><b>'+eur(fact.total)+'</b><em>'+eur(fact.base)+' + IVA</em></div>'+
     '<div><small>Gastos</small><b>'+eur(gTot)+'</b><em>'+eur(gBase)+' sin IVA</em></div>'+
-    '<div class="wide '+(hac>=0?'pay':'back')+'"><small>'+(hac>=0?'IVA a pagar a Hacienda':'Hacienda te devuelve')+'</small><b>'+eur(Math.abs(hac))+'</b><em>IVA cobrado '+eur(fact.iva)+' − IVA pagado '+eur(gIva)+'</em></div>'+
-    '<div class="wide"><small>Te queda (sin IVA)</small><b>'+eur(fact.base-gBase)+'</b><em>Facturado sin IVA − gastos sin IVA</em></div></div>'+
+    '<div class="wide '+(hac>=0?'pay':'back')+'"><small>'+(hac>=0?'IVA a pagar a Hacienda':'Hacienda te devuelve')+'</small><b>'+eur(Math.abs(hac))+'</b><em>IVA de tus trabajos '+eur(fact.iva)+' − IVA de tus gastos '+eur(gIva)+'</em></div>'+
+    '<div><small>Ya cobrado</small><b>'+eur(fcob)+'</b><em>de estos trabajos</em></div><div><small>Te deben</small><b>'+eur(fdebe)+'</b><em>de estos trabajos</em></div>'+
+    '<div class="wide"><small>Te queda (sin IVA)</small><b>'+eur(fact.base-gBase)+'</b><em>Trabajos sin IVA − gastos sin IVA</em></div></div>'+
     '<h2 class="sec">IVA pagado en gastos</h2><div class="card"><table class="tb"><tr><th></th><th class="rr">Sin IVA</th><th class="rr">IVA</th><th class="rr">Total</th></tr>'+
     ['S','T','O'].map(k=>row(GK[k]+' <small class="hint">('+byK[k].n+')</small>',eur(byK[k].base),eur(byK[k].iva),eur(byK[k].tot))).join('')+
     row('Total',eur(gBase),eur(gIva),eur(gTot),1)+'</table></div>'+
