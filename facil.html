@@ -178,7 +178,7 @@ const ARR=['docs','cli','gas'];
 const now=()=>Date.now();
 const uid=()=>now().toString(36)+Math.random().toString(36).slice(2,7);
 const ls={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
-const DEF_CFG={u:0,empresa:'Frimaran SL',tel:'617 52 48 08',insta:'@labrigada.sat',ciudad:'Madrid',cif:'',dir:'',mail:'',iban:'',
+const DEF_CFG={u:0,empresa:'SAT Frimaran S.L.',tel:'617 52 48 08',insta:'@labrigada.sat',ciudad:'Madrid',cif:'',dir:'',mail:'',iban:'',
   pago:'Al terminar el servicio.\nTransferencia o Bizum.',
   cond:'Incluye los repuestos y la mano de obra indicados.\nCualquier trabajo adicional se presupuestará y aprobará aparte.',
   validez:15,ini:{P:12,A:2,R:2}};
@@ -773,6 +773,8 @@ const cloud=(function(){
   // 3) Quitar el LB-2026-012 sin cliente (rechazado) y el albarán de Alfredo Pasta que quedó en 0 €, pedido por Donny.
   S.docs.forEach(d=>{if(!d.del&&((d.num==='LB-2026-012'&&!(d.cl&&(d.cl.n||'').trim())&&d.est==='rechazado')||(d.id==='imp-alb001a'&&tot(d).total===0))){
     Object.keys(d).forEach(k=>{if(!['id','t','num'].includes(k))delete d[k]});d.del=1;d.u=now();ch=true}});
+  // 4) Datos fiscales de la empresa (escritura de SAT FRIMARAN, S.L.), si aún no están puestos.
+  if(!(S.cfg.cif||'').trim()){Object.assign(S.cfg,{empresa:'SAT Frimaran S.L.',cif:'B75400507',dir:'Calle Hermosilla 41, 1.º DC, 28001 Madrid',u:now()});ch=true}
   if(!S.docs.some(d=>d.id==='imp-alb-cristal')){
     S.docs.push({id:'imp-alb-cristal',u:2,t:'A',num:nextNum('A'),f:today(),
       cl:{n:'Alfredo Pasta SL',cif:'',dir:'Plaza de Cascorro 21\nLa Latina, Madrid',tel:'',mail:''},
