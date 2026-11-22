@@ -59,7 +59,7 @@ nav.tabs button.on b{color:var(--fire)}
 .item .r{text-align:right;white-space:nowrap}
 .badge{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;background:#eee;margin-top:3px}
 .b-pendiente{background:#fdecc8;color:#8a5300}.b-aceptado{background:#d7f0ff;color:#035a85}.b-rechazado{background:#f4d6d2;color:#8d2a1e}
-.b-pagado{background:#d4f3df;color:#14683a}.b-a-cuenta{background:#fde2d4;color:#9a3a0c}.b-pasado{background:#e8e6f5;color:#3d3a7a}
+.b-enviado{background:#d7f0ff;color:#035a85}.b-pagado{background:#d4f3df;color:#14683a}.b-a-cuenta{background:#fde2d4;color:#9a3a0c}.b-pasado{background:#e8e6f5;color:#3d3a7a}
 .empty{text-align:center;color:var(--steel);padding:30px 10px}
 h2.sec{font-family:'Barlow Condensed';font-weight:800;text-transform:uppercase;letter-spacing:.06em;font-size:20px;margin:22px 0 8px}
 .card{background:#fff;border-radius:14px;padding:14px;margin-bottom:12px}
@@ -229,11 +229,11 @@ function tot(d){
 }
 function estado(d){
   const t=tot(d);
-  if(d.t==='A'){if(t.total>0&&t.falta<=0.005)return'pagado';if(t.pag>0)return'a cuenta';return'pendiente'}
+  if(d.t==='A'){if(t.total>0&&t.falta<=0.005)return'pagado';if(t.pag>0)return'a cuenta';return d.est&&d.est!=='rechazado'?d.est:'pendiente'}
   if(d.pasado)return'pasado';
   return d.est||'pendiente';
 }
-const ESTXT={pendiente:'Pendiente',aceptado:'Aceptado',rechazado:'Rechazado',pagado:'Pagado','a cuenta':'Pagado a cuenta',pasado:'Hecho albarán'};
+const ESTXT={pendiente:'Pendiente',enviado:'Enviado',aceptado:'Aceptado',rechazado:'Rechazado',pagado:'Pagado','a cuenta':'Pagado a cuenta',pasado:'Hecho albarán'};
 const badge=e=>'<span class="badge b-'+e.replace(' ','-')+'">'+ESTXT[e]+'</span>';
 
 // ================= Vistas =================
@@ -305,7 +305,9 @@ function vDoc(){
     '<label class="switch"><input type="checkbox" id="siva"'+(d.siva?'':' checked')+'> Sumar IVA 21 %</label>'+
     '<div class="tots" id="tt"></div></div>'+
     (isP?'<h2 class="sec">¿Qué ha dicho el cliente?</h2><div class="card"><div class="est" id="es">'+(d.pasado?'<span class="hint">Ya está pasado a albarán '+esc(d.pasado)+'.</span>':['pendiente','aceptado','rechazado'].map(e=>'<button data-e="'+e+'" class="'+(d.est===e?'on':'')+'">'+ESTXT[e]+'</button>').join(''))+'</div>'+
-      (d.pasado?'':'<button class="btn o" id="toA" style="width:100%;margin-top:12px">Pasar a albarán</button>')+'</div>':'')+
+      (d.pasado?'':'<button class="btn o" id="toA" style="width:100%;margin-top:12px">Pasar a albarán</button>')+'</div>':
+     '<h2 class="sec">Estado del albarán</h2><div class="card"><div class="est" id="esA">'+['pendiente','enviado','aceptado'].map(e=>'<button data-e="'+e+'" class="'+((d.est||'pendiente')===e?'on':'')+'">'+ESTXT[e]+'</button>').join('')+'</div>'+
+     '<div class="hint" style="margin-top:8px">Cuando te paguen, apúntalo abajo en Cobros y se pone en <b>Pagado</b> solo.</div></div>')+
     '<h2 class="sec">Cobros</h2><div class="card"><div id="pg"></div>'+
     '<div class="row2" style="margin-top:10px"><label class="f"><span>Importe cobrado</span><input class="i" id="pi" inputmode="decimal" placeholder="0,00"></label>'+
     '<label class="f"><span>Forma</span><select class="i" id="pf"><option>Transferencia</option><option>Bizum</option><option>Efectivo</option><option>Tarjeta</option></select></label></div>'+
@@ -343,6 +345,7 @@ function vDoc(){
   $('aR').onclick=()=>addL('R');$('aM').onclick=()=>addL('M');
   $('siva').onchange=e=>{d.siva=!e.target.checked;drawTot();drawPays();save()};
   // estado
+  if(!isP)$('esA').onclick=e=>{const b=e.target.closest('button');if(!b)return;d.est=b.dataset.e;save();vDoc()};
   if(isP&&!d.pasado){
     $('es').onclick=e=>{const b=e.target.closest('button');if(!b)return;d.est=b.dataset.e;save();vDoc()};
     $('toA').onclick=()=>{
@@ -684,6 +687,9 @@ const cloud=(function(){
     if(!d.del&&/^imp-/.test(d.id)&&d.id!=='imp-alb-cristal'&&(d.u||0)<=2&&d.cl&&!/caf[eé] sport/i.test(d.cl.n||'')&&estado(d)==='pendiente'){
       Object.keys(d).forEach(k=>{if(!['id','t','num'].includes(k))delete d[k]});d.del=1;d.u=2;ch=true}
   });
+  // 3) Quitar el LB-2026-012 sin cliente (rechazado) y el albarán de Alfredo Pasta que quedó en 0 €, pedido por Donny.
+  S.docs.forEach(d=>{if(!d.del&&((d.num==='LB-2026-012'&&!(d.cl&&(d.cl.n||'').trim())&&d.est==='rechazado')||(d.id==='imp-alb001a'&&tot(d).total===0))){
+    Object.keys(d).forEach(k=>{if(!['id','t','num'].includes(k))delete d[k]});d.del=1;d.u=now();ch=true}});
   if(!S.docs.some(d=>d.id==='imp-alb-cristal')){
     S.docs.push({id:'imp-alb-cristal',u:2,t:'A',num:nextNum('A'),f:today(),
       cl:{n:'Alfredo Pasta SL',cif:'',dir:'Plaza de Cascorro 21\nLa Latina, Madrid',tel:'',mail:''},
